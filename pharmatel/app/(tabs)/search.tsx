@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -29,50 +30,33 @@ export default function SearchScreen() {
   const inputRef = useRef<TextInput>(null);
 
   const [query, setQuery] = useState("");
-  const [medicines, setMedicines] = useState<SearchableMedicine[]>([]);
   const [activeForm, setActiveForm] = useState(ALL_FORMS);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const topPadding = insets.top + (Platform.OS === "web" ? 67 : 0);
 
   useEffect(() => {
-    let cancelled = false;
+    const timer = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(timer);
+  }, [query]);
 
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await fetchMedicinesCatalog(query);
-        console.log(data)
-        if (!cancelled) {
-          setMedicines(data);
-          if (
-            activeForm !== ALL_FORMS &&
-            !data.some((item) => item.dosageForm === activeForm)
-          ) {
-            setActiveForm(ALL_FORMS);
-          }
-        }
-      } catch (err) {
-        if (!cancelled) {
-          const message =
-            err instanceof Error ? err.message : "Failed to load medicines";
-          setError(message);
-          setMedicines([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
+  const {
+    data: medicines = [],
+    isLoading,
+    isFetching,
+    error,
+  } = useQuery<SearchableMedicine[]>({
+    queryKey: ["catalog", "medicines", debouncedQuery],
+    queryFn: () => fetchMedicinesCatalog(debouncedQuery),
+  });
 
-    const timer = setTimeout(load, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [query, activeForm]);
+  useEffect(() => {
+    if (
+      activeForm !== ALL_FORMS &&
+      !medicines.some((item) => item.dosageForm === activeForm)
+    ) {
+      setActiveForm(ALL_FORMS);
+    }
+  }, [activeForm, medicines]);
 
   const dosageForms = useMemo(() => {
     const forms = [...new Set(medicines.map((item) => item.dosageForm))];
@@ -189,7 +173,7 @@ export default function SearchScreen() {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View style={styles.headerStateContainer}>
-            {loading ? (
+            {isLoading || isFetching ? (
               <View style={styles.loadingRow}>
                 <ActivityIndicator size="small" color={colors.primary} />
                 <Text
@@ -200,7 +184,7 @@ export default function SearchScreen() {
               </View>
             ) : error ? (
               <Text style={[styles.resultsCount, { color: colors.error }]}>
-                {error}
+                {error instanceof Error ? error.message : "Failed to load medicines"}
               </Text>
             ) : results.length > 0 ? (
               <Text style={[styles.resultsCount, { color: colors.textMuted }]}>

@@ -1,4 +1,6 @@
-const DEFAULT_API_BASE_URL = "http://10.136.243.234:8080/api";
+import axios from "axios";
+
+const DEFAULT_API_BASE_URL = "http://localhost:8080/api";
 
 export function getApiBaseUrl(): string {
   const envBaseUrl =
@@ -32,40 +34,61 @@ export async function apiRequest<T>(
   options: RequestInit = {},
   token?: string | null,
 ): Promise<T> {
-  const headers = new Headers(options.headers);
-  headers.set("Accept", "application/json");
+  const rawHeaders = (options.headers as Record<string, string>) || {};
+  const headers: Record<string, string> = { ...rawHeaders };
+  headers["Accept"] = "application/json";
 
   const bodyIsFormData =
     typeof FormData !== "undefined" && options.body instanceof FormData;
-  if (options.body && !bodyIsFormData && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  if (options.body && !bodyIsFormData && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
   }
 
   if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...options,
+  const url = `${getApiBaseUrl()}${path}`;
+  const method = (options.method ?? "GET") as any;
+  const axiosConfig: any = {
+    url,
+    method,
     headers,
-  });
+    data: options.body,
+    validateStatus: () => true,
+  };
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new ApiError(
-      errorText || response.statusText || "Request failed",
-      response.status,
-    );
+  try {
+    const response = await axios.request(axiosConfig);
+
+    if (response.status >= 400) {
+      const respData = response.data;
+      let errorText = response.statusText || "Request failed";
+      try {
+        if (typeof respData === "string") errorText = respData;
+        else if (respData && typeof respData === "object")
+          errorText = JSON.stringify(respData);
+      } catch {}
+      throw new ApiError(errorText, response.status);
+    }
+
+    if (response.status === 204) return undefined as T;
+
+    const resp = response.data;
+    if (resp === "" || resp == null) return undefined as T;
+    return resp as T;
+  } catch (err: any) {
+    if (err && err.isAxiosError) {
+      const status = err.response?.status ?? 0;
+      const respData = err.response?.data;
+      let errorText = err.message ?? "Request failed";
+      try {
+        if (typeof respData === "string") errorText = respData;
+        else if (respData && typeof respData === "object")
+          errorText = JSON.stringify(respData);
+      } catch {}
+      throw new ApiError(errorText, status);
+    }
+    throw err;
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  const text = await response.text();
-  if (!text) {
-    return undefined as T;
-  }
-
-  return JSON.parse(text) as T;
 }

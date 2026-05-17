@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
@@ -445,9 +446,7 @@ export default function NewPrescriptionScreen() {
 
   // ── Step 1: medication ──
   const [search, setSearch] = useState("");
-  const [medicines, setMedicines] = useState<SearchableMedicine[]>([]);
-  const [medicinesLoading, setMedicinesLoading] = useState(true);
-  const [medicinesError, setMedicinesError] = useState<string | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedMed, setSelectedMed] = useState<SearchableMedicine | null>(
     null,
   );
@@ -502,39 +501,25 @@ export default function NewPrescriptionScreen() {
   }, [isEdit, prescriptionId, prescriptions]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      setMedicinesLoading(true);
-      setMedicinesError(null);
-      try {
-        const data = await fetchMedicinesCatalog(search);
-        if (!cancelled) {
-          setMedicines(data);
-          if (selectedMed && !data.some((item) => item.id === selectedMed.id)) {
-            setSelectedMed(null);
-          }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          const message =
-            error instanceof Error ? error.message : "Failed to load medicines";
-          setMedicines([]);
-          setMedicinesError(message);
-        }
-      } finally {
-        if (!cancelled) {
-          setMedicinesLoading(false);
-        }
-      }
-    };
-
-    const timer = setTimeout(load, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+    const timer = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(timer);
   }, [search]);
+
+  const {
+    data: medicines = [],
+    isLoading: medicinesLoading,
+    isFetching: medicinesFetching,
+    error: medicinesError,
+  } = useQuery<SearchableMedicine[]>({
+    queryKey: ["catalog", "medicines", debouncedSearch],
+    queryFn: () => fetchMedicinesCatalog(debouncedSearch),
+  });
+
+  useEffect(() => {
+    if (selectedMed && !medicines.some((item) => item.id === selectedMed.id)) {
+      setSelectedMed(null);
+    }
+  }, [medicines, selectedMed]);
 
   const filteredMeds = useCallback(() => {
     return medicines;
@@ -671,7 +656,7 @@ export default function NewPrescriptionScreen() {
                 />
               </View>
 
-              {medicinesLoading && (
+              {(medicinesLoading || medicinesFetching) && (
                 <View style={styles.loadingRow}>
                   <ActivityIndicator size="small" color={colors.primary} />
                   <Text
@@ -698,7 +683,9 @@ export default function NewPrescriptionScreen() {
                     color={colors.error}
                   />
                   <Text style={[styles.asNeededText, { color: colors.error }]}>
-                    {medicinesError}
+                    {medicinesError instanceof Error
+                      ? medicinesError.message
+                      : "Failed to load medicines"}
                   </Text>
                 </View>
               )}

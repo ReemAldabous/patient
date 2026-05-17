@@ -1,4 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import * as Notifications from "expo-notifications";
 import React, {
   createContext,
@@ -99,22 +104,65 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
-  const [observationSessions, setObservationSessions] = useState<
-    ObservationSession[]
-  >([]);
-  const [diaryEntries, setDiaryEntries] = useState<DiaryEntry[]>([]);
-  const [symptomDefinitions, setSymptomDefinitions] = useState<
-    SymptomDefinition[]
-  >([]);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [currentDoseNotification, setCurrentDoseNotification] = useState<{
     notification: Notifications.Notification;
     prescriptionId: string;
     doseScheduleId: string;
   } | null>(null);
+
+  const prescriptionsKey = ["app", "prescriptions", patient?.id] as const;
+  const observationSessionsKey = [
+    "app",
+    "observationSessions",
+    patient?.id,
+  ] as const;
+  const diaryEntriesKey = ["app", "diaryEntries", patient?.id] as const;
+  const symptomDefinitionsKey = [
+    "app",
+    "symptomDefinitions",
+    patient?.id,
+  ] as const;
+
+  const prescriptionsQuery = useQuery<Prescription[]>({
+    queryKey: prescriptionsKey,
+    queryFn: getPrescriptions,
+    enabled: isAuthenticated,
+  });
+
+  const observationSessionsQuery = useQuery<ObservationSession[]>({
+    queryKey: observationSessionsKey,
+    queryFn: getObservationSessions,
+    enabled: isAuthenticated,
+  });
+
+  const diaryEntriesQuery = useQuery<DiaryEntry[]>({
+    queryKey: diaryEntriesKey,
+    queryFn: getDiaryEntries,
+    enabled: isAuthenticated,
+  });
+
+  const symptomDefinitionsQuery = useQuery<SymptomDefinition[]>({
+    queryKey: symptomDefinitionsKey,
+    queryFn: getSymptomDefinitions,
+    enabled: isAuthenticated,
+  });
+
+  const prescriptions = prescriptionsQuery.data ?? [];
+  const observationSessions = observationSessionsQuery.data ?? [];
+  const diaryEntries = diaryEntriesQuery.data ?? [];
+  const symptomDefinitions = symptomDefinitionsQuery.data ?? [];
+
+  const isLoading =
+    isAuthChecking ||
+    (isAuthenticated &&
+      (prescriptionsQuery.isPending ||
+        observationSessionsQuery.isPending ||
+        diaryEntriesQuery.isPending ||
+        symptomDefinitionsQuery.isPending));
 
   useEffect(() => {
     checkAuth();
@@ -159,8 +207,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       const handled = await handleDoseNotificationAction(response);
       if (handled) {
-        const rxs = await getPrescriptions();
-        setPrescriptions(rxs);
+        await queryClient.invalidateQueries({ queryKey: prescriptionsKey });
         setCurrentDoseNotification(null);
       }
     };
@@ -219,51 +266,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notificationSub.remove();
       responseSub.remove();
     };
-  }, [isAuthenticated]);
-
-  const loadData = async () => {
-    const [rxsResult, sessionsResult, entriesResult, symptomsResult] =
-      await Promise.allSettled([
-        getPrescriptions(),
-        getObservationSessions(),
-        getDiaryEntries(),
-        getSymptomDefinitions(),
-      ]);
-
-    if (rxsResult.status === "fulfilled") {
-      setPrescriptions(rxsResult.value);
-    } else {
-      console.error("Failed to load prescriptions:", rxsResult.reason);
-      setPrescriptions([]);
-    }
-
-    if (sessionsResult.status === "fulfilled") {
-      setObservationSessions(sessionsResult.value);
-    } else {
-      console.error(
-        "Failed to load observation sessions:",
-        sessionsResult.reason,
-      );
-      setObservationSessions([]);
-    }
-
-    if (entriesResult.status === "fulfilled") {
-      setDiaryEntries(entriesResult.value);
-    } else {
-      console.error("Failed to load diary entries:", entriesResult.reason);
-      setDiaryEntries([]);
-    }
-
-    if (symptomsResult.status === "fulfilled") {
-      setSymptomDefinitions(symptomsResult.value);
-    } else {
-      console.error(
-        "Failed to load symptom definitions:",
-        symptomsResult.reason,
-      );
-      setSymptomDefinitions([]);
-    }
-  };
+  }, [isAuthenticated, prescriptionsKey, queryClient]);
 
   const checkAuth = async () => {
     try {
@@ -273,13 +276,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (patientStr) {
           setPatient(JSON.parse(patientStr));
           setIsAuthenticated(true);
-          await loadData();
         }
       }
     } catch (e) {
       console.error("Auth check failed:", e);
     } finally {
-      setIsLoading(false);
+      setIsAuthChecking(false);
     }
   };
 
@@ -289,10 +291,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const patientStr = await AsyncStorage.getItem("patient");
       if (patientStr) setPatient(JSON.parse(patientStr));
       setIsAuthenticated(true);
-      await loadData();
+      await queryClient.invalidateQueries({ queryKey: ["app"] });
     }
     return result;
-  }, []);
+  }, [queryClient]);
 
   const register = useCallback(
     async (input: {
@@ -312,11 +314,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const patientStr = await AsyncStorage.getItem("patient");
         if (patientStr) setPatient(JSON.parse(patientStr));
         setIsAuthenticated(true);
-        await loadData();
+        await queryClient.invalidateQueries({ queryKey: ["app"] });
       }
       return result;
     },
-    [],
+    [queryClient],
   );
 
   const logout = useCallback(async () => {
@@ -324,84 +326,152 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await logoutService();
     setPatient(null);
     setIsAuthenticated(false);
-    setPrescriptions([]);
-    setObservationSessions([]);
-    setDiaryEntries([]);
-  }, []);
+    queryClient.removeQueries({ queryKey: ["app"] });
+  }, [queryClient]);
 
-  const markDoseTaken = useCallback(
-    async (prescriptionId: string, doseScheduleId: string, note?: string) => {
+  const markDoseTakenMutation = useMutation({
+    mutationFn: ({
+      prescriptionId,
+      doseScheduleId,
+      note,
+    }: {
+      prescriptionId: string;
+      doseScheduleId: string;
+      note?: string;
+    }) => {
       const updates: Partial<DoseSchedule> = {
         status: "taken",
         takenAt: new Date().toISOString(),
         patientNote: note,
       };
-      const updated = await updateDoseSchedule(
+      return updateDoseSchedule(prescriptionId, doseScheduleId, updates);
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData(prescriptionsKey, updated);
+    },
+  });
+
+  const saveObservationMutation = useMutation({
+    mutationFn: saveObservationSession,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: observationSessionsKey });
+    },
+  });
+
+  const removeObservationMutation = useMutation({
+    mutationFn: deleteObservationSession,
+    onSuccess: (updated) => {
+      queryClient.setQueryData(observationSessionsKey, updated);
+    },
+  });
+
+  const saveDiaryEntryMutation = useMutation({
+    mutationFn: saveDiaryEntry,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: diaryEntriesKey });
+    },
+  });
+
+  const removeDiaryEntryMutation = useMutation({
+    mutationFn: deleteDiaryEntry,
+    onSuccess: async (_, entryId) => {
+      queryClient.setQueryData<DiaryEntry[]>(diaryEntriesKey, (prev = []) =>
+        prev.filter((entry) => entry.id !== entryId),
+      );
+      await queryClient.invalidateQueries({ queryKey: diaryEntriesKey });
+    },
+  });
+
+  const addPrescriptionMutation = useMutation({
+    mutationFn: addPrescription,
+    onSuccess: (updated) => {
+      queryClient.setQueryData(prescriptionsKey, updated);
+    },
+  });
+
+  const deletePrescriptionMutation = useMutation({
+    mutationFn: removePrescription,
+    onSuccess: (updated) => {
+      queryClient.setQueryData(prescriptionsKey, updated);
+    },
+  });
+
+  const updatePrescriptionMutation = useMutation({
+    mutationFn: ({
+      prescriptionId,
+      prescription,
+    }: {
+      prescriptionId: string;
+      prescription: Prescription;
+    }) => updatePrescription(prescriptionId, prescription),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(prescriptionsKey, updated);
+    },
+  });
+
+  const markDoseTaken = useCallback(
+    async (prescriptionId: string, doseScheduleId: string, note?: string) => {
+      await markDoseTakenMutation.mutateAsync({
         prescriptionId,
         doseScheduleId,
-        updates,
-      );
-      setPrescriptions(updated);
+        note,
+      });
     },
-    [],
+    [markDoseTakenMutation],
   );
 
   const refreshPrescriptions = useCallback(async () => {
-    const rxs = await getPrescriptions();
-    setPrescriptions(rxs);
-  }, []);
+    await queryClient.invalidateQueries({ queryKey: prescriptionsKey });
+  }, [prescriptionsKey, queryClient]);
 
   const saveObservation = useCallback(async (session: ObservationSession) => {
-    await saveObservationSession(session);
-    const sessions = await getObservationSessions();
-    setObservationSessions(sessions);
-  }, []);
+    await saveObservationMutation.mutateAsync(session);
+  }, [saveObservationMutation]);
 
   const removeObservationSession = useCallback(async (sessionId: string) => {
-    const sessions = await deleteObservationSession(sessionId);
-    setObservationSessions(sessions);
-  }, []);
+    await removeObservationMutation.mutateAsync(sessionId);
+  }, [removeObservationMutation]);
 
   const getSessionForDose = useCallback(async (doseScheduleId: string) => {
+    const cached = (queryClient.getQueryData<ObservationSession[]>(
+      observationSessionsKey,
+    ) ?? [])
+      .find((session) => session.doseScheduleId === doseScheduleId);
+    if (cached) return cached;
     return getObservationSessionByDose(doseScheduleId);
-  }, []);
+  }, [observationSessionsKey, queryClient]);
 
   const addDiaryEntry = useCallback(async (entry: DiaryEntry) => {
-    await saveDiaryEntry(entry);
-    const entries = await getDiaryEntries();
-    setDiaryEntries(entries);
-  }, []);
+    await saveDiaryEntryMutation.mutateAsync(entry);
+  }, [saveDiaryEntryMutation]);
 
   const updateDiaryEntry = useCallback(async (entry: DiaryEntry) => {
-    await saveDiaryEntry(entry);
-    const entries = await getDiaryEntries();
-    setDiaryEntries(entries);
-  }, []);
+    await saveDiaryEntryMutation.mutateAsync(entry);
+  }, [saveDiaryEntryMutation]);
 
   const removeDiaryEntry = useCallback(async (entryId: string) => {
-    await deleteDiaryEntry(entryId);
-    setDiaryEntries((prev) => prev.filter((e) => e.id !== entryId));
-  }, []);
+    await removeDiaryEntryMutation.mutateAsync(entryId);
+  }, [removeDiaryEntryMutation]);
 
   const addUserPrescription = useCallback(
     async (prescription: Prescription) => {
-      const updated = await addPrescription(prescription);
-      setPrescriptions(updated);
+      await addPrescriptionMutation.mutateAsync(prescription);
     },
-    [],
+    [addPrescriptionMutation],
   );
 
   const deleteUserPrescription = useCallback(async (prescriptionId: string) => {
-    const updated = await removePrescription(prescriptionId);
-    setPrescriptions(updated);
-  }, []);
+    await deletePrescriptionMutation.mutateAsync(prescriptionId);
+  }, [deletePrescriptionMutation]);
 
   const updateUserPrescription = useCallback(
     async (prescriptionId: string, prescription: Prescription) => {
-      const updated = await updatePrescription(prescriptionId, prescription);
-      setPrescriptions(updated);
+      await updatePrescriptionMutation.mutateAsync({
+        prescriptionId,
+        prescription,
+      });
     },
-    [],
+    [updatePrescriptionMutation],
   );
 
   const dismissDoseNotification = useCallback(() => {

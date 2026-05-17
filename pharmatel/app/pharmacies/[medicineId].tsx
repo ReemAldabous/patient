@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -25,46 +26,18 @@ export default function PharmaciesScreen() {
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
   const [filterInStock, setFilterInStock] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [allPharmacies, setAllPharmacies] = useState<Pharmacy[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const medicineIdParam = Array.isArray(medicineId) ? medicineId[0] : medicineId;
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      if (!medicineId) {
-        setAllPharmacies([]);
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await fetchPharmaciesForMedicine(medicineId);
-        if (!cancelled) {
-          setAllPharmacies(data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          const message =
-            err instanceof Error ? err.message : "Failed to load pharmacies";
-          setError(message);
-          setAllPharmacies([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [medicineId]);
+  const {
+    data: allPharmacies = [],
+    isLoading,
+    isFetching,
+    error,
+  } = useQuery<Pharmacy[]>({
+    queryKey: ["catalog", "pharmacies", medicineIdParam],
+    queryFn: () => fetchPharmaciesForMedicine(medicineIdParam ?? ""),
+    enabled: Boolean(medicineIdParam),
+  });
 
   const pharmacies = filterInStock
     ? allPharmacies.filter((p) => p.inStock)
@@ -140,7 +113,7 @@ export default function PharmaciesScreen() {
           </Pressable>
         </View>
 
-        {loading && (
+        {(isLoading || isFetching) && (
           <View style={styles.loadingState}>
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={[styles.filterLabel, { color: colors.textMuted }]}>
@@ -161,7 +134,7 @@ export default function PharmaciesScreen() {
           >
             <Feather name="alert-triangle" size={14} color={colors.error} />
             <Text style={[styles.infoText, { color: colors.error }]}>
-              {error}
+              {error instanceof Error ? error.message : "Failed to load pharmacies"}
             </Text>
           </View>
         )}
@@ -228,7 +201,7 @@ export default function PharmaciesScreen() {
           </>
         )}
 
-        {pharmaciesWithCoordinates.length === 0 && !loading && !error && (
+        {pharmaciesWithCoordinates.length === 0 && !isLoading && !isFetching && !error && (
           <View
             style={[
               styles.infoBanner,
