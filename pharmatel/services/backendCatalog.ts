@@ -159,17 +159,21 @@ export async function fetchPharmaciesForMedicine(
   const medicineByPharmacyId = new Map<number, ApiPharmacyMedicineDto>();
   await Promise.all(
     nearby.map(async (pharmacy) => {
-      const medicines = await apiRequest<ApiPharmacyMedicineDto[]>(
-        `/pharmacies/${pharmacy.id}/medicines`,
-        {},
-        token,
-      );
+      try {
+        const medicines = await apiRequest<ApiPharmacyMedicineDto[]>(
+          `/pharmacies/${pharmacy.id}/medicines`,
+          {},
+          token,
+        );
 
-      const match = medicines.find(
-        (item) => item.medicineId === numericMedicineId,
-      );
-      if (match) {
-        medicineByPharmacyId.set(pharmacy.id, match);
+        const match = medicines.find(
+          (item) => item.medicineId === numericMedicineId,
+        );
+        if (match) {
+          medicineByPharmacyId.set(pharmacy.id, match);
+        }
+      } catch {
+        // Keep this pharmacy in the list as out-of-stock when inventory lookup fails.
       }
     }),
   );
@@ -177,7 +181,6 @@ export async function fetchPharmaciesForMedicine(
   return nearby
     .map((pharmacy, index) => {
       const match = medicineByPharmacyId.get(pharmacy.id);
-      if (!match) return null;
 
       const fallback = fallbackCoordinates(index);
       const lat = pharmacy.lat ?? fallback.lat;
@@ -191,11 +194,10 @@ export async function fetchPharmaciesForMedicine(
         phone: pharmacy.phone ?? pharmacy.phoneNumber ?? undefined,
         lat,
         lng,
-        inStock: match.quantity > 0,
-        quantity: match.quantity,
+        inStock: (match?.quantity ?? 0) > 0,
+        quantity: match?.quantity ?? 0,
       } as Pharmacy;
     })
-    .filter((item): item is Pharmacy => Boolean(item))
     .sort((a, b) => {
       if (a.inStock !== b.inStock) return a.inStock ? -1 : 1;
       return (b.quantity ?? 0) - (a.quantity ?? 0);

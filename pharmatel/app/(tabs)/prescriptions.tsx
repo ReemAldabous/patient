@@ -136,33 +136,9 @@ export default function PrescriptionsScreen() {
                       params: { id: rx.medicineId, prescriptionId: rx.id },
                     })
                   }
+                  onEdit={() => handleEdit(rx.id)}
+                  onDelete={() => handleDelete(rx.id, rx.medicine.name)}
                 />
-                <Pressable
-                  onPress={() => handleEdit(rx.id)}
-                  style={({ pressed }) => [
-                    styles.editBtn,
-                    {
-                      backgroundColor: colors.primary + "12",
-                      opacity: pressed ? 0.6 : 1,
-                    },
-                  ]}
-                  hitSlop={4}
-                >
-                  <Feather name="edit-2" size={14} color={colors.primary} />
-                </Pressable>
-                <Pressable
-                  onPress={() => handleDelete(rx.id, rx.medicine.name)}
-                  style={({ pressed }) => [
-                    styles.deleteBtn,
-                    {
-                      backgroundColor: "#FF3B3010",
-                      opacity: pressed ? 0.6 : 1,
-                    },
-                  ]}
-                  hitSlop={4}
-                >
-                  <Feather name="trash-2" size={14} color="#FF3B30" />
-                </Pressable>
               </View>
             ))}
           </View>
@@ -191,33 +167,9 @@ export default function PrescriptionsScreen() {
                       params: { id: rx.medicineId, prescriptionId: rx.id },
                     })
                   }
+                  onEdit={() => handleEdit(rx.id)}
+                  onDelete={() => handleDelete(rx.id, rx.medicine.name)}
                 />
-                <Pressable
-                  onPress={() => handleEdit(rx.id)}
-                  style={({ pressed }) => [
-                    styles.editBtn,
-                    {
-                      backgroundColor: colors.primary + "12",
-                      opacity: pressed ? 0.6 : 1,
-                    },
-                  ]}
-                  hitSlop={4}
-                >
-                  <Feather name="edit-2" size={14} color={colors.primary} />
-                </Pressable>
-                <Pressable
-                  onPress={() => handleDelete(rx.id, rx.medicine.name)}
-                  style={({ pressed }) => [
-                    styles.deleteBtn,
-                    {
-                      backgroundColor: "#FF3B3010",
-                      opacity: pressed ? 0.6 : 1,
-                    },
-                  ]}
-                  hitSlop={4}
-                >
-                  <Feather name="trash-2" size={14} color="#FF3B30" />
-                </Pressable>
               </View>
             ))}
           </View>
@@ -296,27 +248,7 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   cardWrap: {
-    position: "relative",
-  },
-  deleteBtn: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  editBtn: {
-    position: "absolute",
-    top: 10,
-    right: 46,
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
+    gap: 8,
   },
   emptyAddBtn: {
     flexDirection: "row",
