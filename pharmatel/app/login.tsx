@@ -171,15 +171,7 @@ export default function LoginScreen() {
             </View>
           ) : null}
 
-          {/* Hint */}
-          <View
-            style={[styles.hintBox, { backgroundColor: colors.primary + "10" }]}
-          >
-            <Feather name="info" size={14} color={colors.primary} />
-            <Text style={[styles.hintText, { color: colors.primary }]}>
-              Use your backend account credentials.
-            </Text>
-          </View>
+         
 
           {/* Login button */}
           <Pressable

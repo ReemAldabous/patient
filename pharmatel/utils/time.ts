@@ -71,6 +71,15 @@ export function getTodayFormatted(): string {
   });
 }
 
+export function toLocalIso(d?: Date | string): string {
+  const date = d ? new Date(d) : new Date();
+  if (Number.isNaN(date.getTime())) return "";
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function foodRequirementLabel(req: string): string {
   switch (req) {
     case "before_meal":

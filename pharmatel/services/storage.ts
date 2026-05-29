@@ -8,7 +8,7 @@ import type {
   Prescription,
   SymptomDefinition,
 } from "@/models";
-import { apiRequest, isApiConfigured } from "./api";
+import { apiRequest, isApiConfigured, ApiError } from "./api";
 
 const KEYS = {
   AUTH_TOKEN: "auth_token",
@@ -531,6 +531,17 @@ export async function login(
 
     return { success: true, token: auth.token };
   } catch (error) {
+    if (
+      error instanceof ApiError &&
+      (error.status === 401 || error.status === 404)
+    ) {
+      return {
+        success: false,
+        error:
+          "لم يتم العثور على حساب. الرجاء إنشاء حساب جديد إذا لم يكن لديك.",
+      };
+    }
+
     return {
       success: false,
       error: getErrorMessage(error, "Login failed"),

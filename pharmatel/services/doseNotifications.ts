@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import { toLocalIso } from "@/utils/time";
 import type { DoseSchedule, Prescription } from "@/models";
 
 const DOSE_PREFIX = "pharmatel-dose-";
@@ -38,7 +39,7 @@ export function doseNotificationIdentifier(
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalIso();
 }
 
 function isPrescriptionActive(rx: Prescription): boolean {
@@ -141,6 +142,8 @@ async function scheduleForDose(rx: Prescription, ds: DoseSchedule) {
     body,
     data: { prescriptionId: rx.id, doseScheduleId: ds.id },
     sound: true as const,
+    // attach category so action buttons (TAKEN / IGNORE) show up
+    categoryIdentifier: ANDROID_CATEGORY,
     ...(Platform.OS === "android"
       ? {
           channelId: ANDROID_CHANNEL,

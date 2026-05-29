@@ -19,6 +19,7 @@ import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import type { DiaryEntry, ObservationSession } from "@/models";
 import { getMetricDef, MOOD_LABELS } from "@/services/diaryMetrics";
+import { toLocalIso } from "@/utils/time";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 
@@ -93,9 +94,7 @@ function mapObservationSessionsToDiaryEntries(
       const at = session.endedAt ?? session.startedAt;
       const dateObj = new Date(at);
       const isValidDate = !Number.isNaN(dateObj.getTime());
-      const date = isValidDate
-        ? dateObj.toISOString().slice(0, 10)
-        : new Date().toISOString().slice(0, 10);
+      const date = isValidDate ? toLocalIso(dateObj) : toLocalIso();
       const time = isValidDate
         ? `${String(dateObj.getHours()).padStart(2, "0")}:${String(
             dateObj.getMinutes(),
@@ -447,7 +446,7 @@ function DateSectionHeader({
   isFirst: boolean;
   colors: (typeof Colors)["light"];
 }) {
-  const isToday = date === new Date().toISOString().slice(0, 10);
+  const isToday = date === toLocalIso();
   return (
     <View style={[dhStyles.wrap, { marginTop: isFirst ? 0 : 24 }]}>
       {/* left line stub */}
@@ -712,7 +711,7 @@ function CalendarModal({
   onSelect: (date: string) => void;
   onClose: () => void;
 }) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toLocalIso();
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth()); // 0-based
 
@@ -1015,7 +1014,7 @@ function buildDayRange(diaryEntries: DiaryEntry[]): string[] {
   for (let i = 0; i < 14; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
-    days.add(d.toISOString().slice(0, 10));
+    days.add(toLocalIso(d));
   }
   // Also include any entry dates older than 14 days
   for (const e of diaryEntries) {
@@ -1090,7 +1089,7 @@ function DayPickerStrip({
           const isSelected = selectedDate === d;
           const hasEntry = entryDates.has(d);
           const dt = new Date(d + "T00:00:00");
-          const isToday = d === new Date().toISOString().slice(0, 10);
+          const isToday = d === toLocalIso();
           const dayName = isToday
             ? "Today"
             : dt.toLocaleDateString("en-US", { weekday: "short" });
@@ -1289,7 +1288,7 @@ export default function DiaryScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showCalendar, setShowCalendar] = useState(false);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toLocalIso();
 
   // ── day picker data ──
   const dayRange = useMemo(() => buildDayRange(diaryEntries), [diaryEntries]);

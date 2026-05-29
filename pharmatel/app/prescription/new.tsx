@@ -17,6 +17,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
+import DateTimeField from "@/components/ui/DateTimeField";
+import { toLocalIso } from "@/utils/time";
 import { useApp } from "@/context/AppContext";
 import type { Medicine, Prescription } from "@/models";
 import {
@@ -76,7 +78,7 @@ function defaultTimesForCount(n: number): string[] {
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalIso();
 }
 
 function uid() {
@@ -984,26 +986,14 @@ export default function NewPrescriptionScreen() {
               >
                 Start date *
               </Text>
-              <View
-                style={[
-                  styles.dateRow,
-                  {
-                    backgroundColor: colors.surfaceSecondary,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <Feather name="calendar" size={15} color={colors.primary} />
-                <TextInput
-                  style={[styles.dateInput, { color: colors.text }]}
-                  value={startDate}
-                  onChangeText={setStartDate}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="numbers-and-punctuation"
-                  maxLength={10}
-                />
-              </View>
+              <DateTimeField
+                value={startDate}
+                onChange={(iso: string) => setStartDate(iso.split("T")[0])}
+                mode="date"
+                placeholder="YYYY-MM-DD"
+                icon="calendar"
+                colors={colors}
+              />
 
               <Pressable
                 onPress={() => {
@@ -1059,30 +1049,14 @@ export default function NewPrescriptionScreen() {
                   >
                     End date
                   </Text>
-                  <View
-                    style={[
-                      styles.dateRow,
-                      {
-                        backgroundColor: colors.surfaceSecondary,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                  >
-                    <Feather
-                      name="calendar"
-                      size={15}
-                      color={colors.textMuted}
-                    />
-                    <TextInput
-                      style={[styles.dateInput, { color: colors.text }]}
-                      value={endDate}
-                      onChangeText={setEndDate}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={colors.textMuted}
-                      keyboardType="numbers-and-punctuation"
-                      maxLength={10}
-                    />
-                  </View>
+                  <DateTimeField
+                    value={endDate}
+                    onChange={(iso: string) => setEndDate(iso.split("T")[0])}
+                    mode="date"
+                    placeholder="YYYY-MM-DD"
+                    icon="calendar"
+                    colors={colors}
+                  />
                 </>
               )}
 

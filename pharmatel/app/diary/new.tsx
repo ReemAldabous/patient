@@ -14,6 +14,8 @@ import {
   useColorScheme,
 } from "react-native";
 import Colors from "@/constants/colors";
+import DateTimeField from "@/components/ui/DateTimeField";
+import { toLocalIso } from "@/utils/time";
 import { useApp } from "@/context/AppContext";
 import type { DiaryMetric, ObservationSession } from "@/models";
 import {
@@ -36,7 +38,7 @@ function nowTime() {
 }
 
 function todayDate() {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalIso();
 }
 
 function toDateTime(date: string, time: string): string {
@@ -235,7 +237,11 @@ export default function NewDiaryEntryScreen() {
         const at = existing.endedAt ?? existing.startedAt;
         const dt = new Date(at);
         if (!Number.isNaN(dt.getTime())) {
-          setDate(dt.toISOString().slice(0, 10));
+          setDate(
+            `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(
+              dt.getDate(),
+            )}`,
+          );
           setTime(`${pad(dt.getHours())}:${pad(dt.getMinutes())}`);
         }
 
@@ -424,44 +430,28 @@ export default function NewDiaryEntryScreen() {
               When
             </Text>
             <View style={styles.dateTimeRow}>
-              <View
-                style={[
-                  styles.dateTimeField,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <Feather name="calendar" size={16} color={colors.primary} />
-                <TextInput
-                  value={date}
-                  onChangeText={setDate}
-                  style={[styles.dateTimeInput, { color: colors.text }]}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-              <View
-                style={[
-                  styles.dateTimeField,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    flex: 0.6,
-                  },
-                ]}
-              >
-                <Feather name="clock" size={16} color={colors.primary} />
-                <TextInput
-                  value={time}
-                  onChangeText={setTime}
-                  style={[styles.dateTimeInput, { color: colors.text }]}
-                  placeholder="HH:MM"
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="numbers-and-punctuation"
-                />
-              </View>
+              <DateTimeField
+                value={date}
+                onChange={(iso: string) => setDate(iso.split("T")[0])}
+                mode="date"
+                placeholder="YYYY-MM-DD"
+                icon="calendar"
+                colors={colors}
+              />
+              <DateTimeField
+                value={
+                  time
+                    ? new Date(`${date}T${time}:00`).toISOString()
+                    : undefined
+                }
+                onChange={(iso: string) =>
+                  setTime(new Date(iso).toTimeString().slice(0, 5))
+                }
+                mode="time"
+                placeholder="HH:MM"
+                icon="clock"
+                colors={colors}
+              />
             </View>
           </View>
 

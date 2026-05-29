@@ -16,15 +16,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 
-type Role = "PATIENT" | "PHARMACY";
-
 export default function SignUpScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
   const insets = useSafeAreaInsets();
   const { register } = useApp();
-
-  const [role, setRole] = useState<Role>("PATIENT");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -36,26 +32,13 @@ export default function SignUpScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const isPatient = role === "PATIENT";
+  const isPatient = true;
 
   const canSubmit = useMemo(() => {
     if (!username.trim() || !password.trim()) return false;
     if (password !== confirmPassword) return false;
-    if (isPatient) {
-      return Boolean(name.trim() && email.trim() && phoneNumber.trim());
-    }
-    return Boolean(pharmacyName.trim() && pharmacistName.trim());
-  }, [
-    confirmPassword,
-    email,
-    isPatient,
-    name,
-    password,
-    pharmacyName,
-    pharmacistName,
-    phoneNumber,
-    username,
-  ]);
+    return Boolean(name.trim() && email.trim() && phoneNumber.trim());
+  }, [confirmPassword, email, name, password, phoneNumber, username]);
 
   const handleRegister = async () => {
     if (!canSubmit) {
@@ -69,17 +52,10 @@ export default function SignUpScreen() {
     const result = await register({
       username: username.trim(),
       password,
-      role,
-      ...(isPatient
-        ? {
-            name: name.trim(),
-            email: email.trim(),
-            phoneNumber: phoneNumber.trim(),
-          }
-        : {
-            pharmacyName: pharmacyName.trim(),
-            pharmacistName: pharmacistName.trim(),
-          }),
+      role: "PATIENT",
+      name: name.trim(),
+      email: email.trim(),
+      phoneNumber: phoneNumber.trim(),
     });
 
     if (result.success) {
@@ -117,7 +93,7 @@ export default function SignUpScreen() {
             Create account
           </Text>
           <Text style={[styles.tagline, { color: colors.textSecondary }]}>
-            Register as a patient or a pharmacy user
+            Register as a patient
           </Text>
         </View>
 
@@ -131,21 +107,6 @@ export default function SignUpScreen() {
             },
           ]}
         >
-          <View style={styles.roleRow}>
-            <RoleButton
-              label="Patient"
-              active={isPatient}
-              colors={colors}
-              onPress={() => setRole("PATIENT")}
-            />
-            <RoleButton
-              label="Pharmacy"
-              active={!isPatient}
-              colors={colors}
-              onPress={() => setRole("PHARMACY")}
-            />
-          </View>
-
           <Field
             label="Username"
             value={username}
@@ -276,41 +237,6 @@ export default function SignUpScreen() {
   );
 }
 
-function RoleButton({
-  label,
-  active,
-  colors,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  colors: any;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.roleBtn,
-        {
-          backgroundColor: active ? colors.primary : colors.surfaceSecondary,
-          borderColor: active ? colors.primary : colors.border,
-          opacity: pressed ? 0.9 : 1,
-        },
-      ]}
-    >
-      <Text
-        style={[
-          styles.roleBtnText,
-          { color: active ? "#fff" : colors.textSecondary },
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 function Field({
   label,
   value,
@@ -410,17 +336,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
-  roleBtn: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  roleBtnText: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-  },
+
   fieldGroup: {
     gap: 6,
   },
