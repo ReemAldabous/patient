@@ -16,13 +16,15 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import "@/notificationTasks";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DoseAlertModal } from "@/components/DoseAlertModal";
-import { AppProvider } from "@/context/AppContext";
+import { AppProvider, useApp } from "@/context/AppContext";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  const { t } = useApp();
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
@@ -35,16 +37,16 @@ function RootLayoutNav() {
         options={{
           presentation: "modal",
           headerShown: true,
-          title: "Dose Detail",
-          headerBackTitle: "Back",
+          title: t("doseDetail"),
+          headerBackTitle: t("back"),
         }}
       />
       <Stack.Screen
         name="medicine/[id]"
         options={{
           headerShown: true,
-          title: "Medication Detail",
-          headerBackTitle: "Back",
+          title: t("medicationDetail"),
+          headerBackTitle: t("back"),
         }}
       />
       <Stack.Screen
@@ -52,16 +54,16 @@ function RootLayoutNav() {
         options={{
           presentation: "modal",
           headerShown: true,
-          title: "Symptom Diary",
-          headerBackTitle: "Back",
+          title: t("symptomDiary"),
+          headerBackTitle: t("back"),
         }}
       />
       <Stack.Screen
         name="pharmacies/[medicineId]"
         options={{
           headerShown: true,
-          title: "Find Pharmacies",
-          headerBackTitle: "Search",
+          title: t("findPharmacies"),
+          headerBackTitle: t("search"),
         }}
       />
       <Stack.Screen
@@ -69,8 +71,8 @@ function RootLayoutNav() {
         options={{
           presentation: "modal",
           headerShown: true,
-          title: "New Diary Entry",
-          headerBackTitle: "Diary",
+          title: t("newDiaryEntry"),
+          headerBackTitle: t("diary"),
         }}
       />
       <Stack.Screen
@@ -78,8 +80,8 @@ function RootLayoutNav() {
         options={{
           presentation: "modal",
           headerShown: true,
-          title: "Add Prescription",
-          headerBackTitle: "Schedule",
+          title: t("addPrescription"),
+          headerBackTitle: t("schedule"),
         }}
       />
     </Stack>

@@ -8,35 +8,39 @@ import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
+import { useApp } from "@/context/AppContext";
 
 function NativeTabLayout() {
+  const { t } = useApp();
+
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
         <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>Today</Label>
+        <Label>{t("today")}</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="prescriptions">
         <Icon sf={{ default: "list.clipboard", selected: "list.clipboard.fill" }} />
-        <Label>Schedule</Label>
+        <Label>{t("schedule")}</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="search" role="search">
         <Icon sf={{ default: "magnifyingglass", selected: "magnifyingglass" }} />
-        <Label>Search</Label>
+        <Label>{t("search")}</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="diary">
         <Icon sf={{ default: "book.pages", selected: "book.pages.fill" }} />
-        <Label>Diary</Label>
+        <Label>{t("diary")}</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <Icon sf={{ default: "person", selected: "person.fill" }} />
-        <Label>Profile</Label>
+        <Label>{t("profile")}</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
 
 function ClassicTabLayout() {
+  const { t } = useApp();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
   const isDark = colorScheme === "dark";
@@ -83,7 +87,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Today",
+          title: t("today"),
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="house" tintColor={color} size={24} />
@@ -95,7 +99,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="prescriptions"
         options={{
-          title: "Schedule",
+          title: t("schedule"),
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="list.clipboard" tintColor={color} size={24} />
@@ -107,7 +111,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="search"
         options={{
-          title: "Search",
+          title: t("search"),
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="magnifyingglass" tintColor={color} size={24} />
@@ -123,7 +127,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="diary"
         options={{
-          title: "Diary",
+          title: t("diary"),
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="book.pages" tintColor={color} size={24} />
@@ -135,7 +139,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
+          title: t("profile"),
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="person" tintColor={color} size={24} />

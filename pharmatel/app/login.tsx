@@ -20,7 +20,7 @@ export default function LoginScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
   const insets = useSafeAreaInsets();
-  const { login } = useApp();
+  const { login, t } = useApp();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -30,7 +30,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
-      setError("Please enter your username and password");
+      setError(t("pleaseEnterCredentials"));
       return;
     }
     setLoading(true);
@@ -39,7 +39,7 @@ export default function LoginScreen() {
     if (result.success) {
       router.replace("/(tabs)");
     } else {
-      setError(result.error ?? "Login failed");
+      setError(result.error ?? t("loginFailed"));
       setLoading(false);
     }
   };
@@ -68,10 +68,10 @@ export default function LoginScreen() {
             <Feather name="activity" size={36} color="#fff" />
           </View>
           <Text style={[styles.appName, { color: colors.text }]}>
-            PharmaTel
+            {t("appName")}
           </Text>
           <Text style={[styles.tagline, { color: colors.textSecondary }]}>
-            Your personal medication manager
+            {t("welcomeTagline")}
           </Text>
         </View>
 
@@ -87,16 +87,16 @@ export default function LoginScreen() {
           ]}
         >
           <Text style={[styles.cardTitle, { color: colors.text }]}>
-            Sign In
+            {t("signInTitle")}
           </Text>
           <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
-            Enter your credentials to continue
+            {t("signInSubtitle")}
           </Text>
 
           {/* Username */}
           <View style={styles.fieldGroup}>
             <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
-              Username
+              {t("username")}
             </Text>
             <View
               style={[
@@ -123,7 +123,7 @@ export default function LoginScreen() {
           {/* Password */}
           <View style={styles.fieldGroup}>
             <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
-              Password
+              {t("password")}
             </Text>
             <View
               style={[
@@ -187,10 +187,10 @@ export default function LoginScreen() {
             ]}
           >
             {loading ? (
-              <Text style={styles.loginBtnText}>Signing in...</Text>
+              <Text style={styles.loginBtnText}>{t("loading")}</Text>
             ) : (
               <>
-                <Text style={styles.loginBtnText}>Sign In</Text>
+                <Text style={styles.loginBtnText}>{t("signIn")}</Text>
                 <Feather name="arrow-right" size={18} color="#fff" />
               </>
             )}
@@ -204,14 +204,14 @@ export default function LoginScreen() {
             ]}
           >
             <Text style={[styles.signupLinkText, { color: colors.primary }]}>
-              Create a new account
+              {t("createAccount")}
             </Text>
           </Pressable>
         </View>
 
         {/* Footer */}
         <Text style={[styles.footer, { color: colors.textMuted }]}>
-          Medication management powered by PharmaTel
+          {t("welcomeTagline")}
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

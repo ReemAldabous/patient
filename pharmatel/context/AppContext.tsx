@@ -34,6 +34,8 @@ import {
   saveDiaryEntry,
   updatePrescription,
   updateDoseSchedule,
+  markPrescriptionDone as markPrescriptionDoneService,
+  updatePrescriptionTimeShift as updatePrescriptionTimeShiftService,
 } from "@/services/storage";
 import {
   cancelAllDoseNotifications,
@@ -43,11 +45,24 @@ import {
   handleDoseNotificationAction,
   setIncomingDoseNotification,
 } from "@/notificationTasks";
+import {
+  detectPreferredLanguage,
+  getLocaleForLanguage,
+  isRTL,
+  normalizeLanguage,
+  translate,
+  type Language,
+  type TranslationKey,
+  type TranslationParams,
+} from "@/lib/i18n";
 
 interface AppContextValue {
   patient: Patient | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  language: Language;
+  locale: string;
+  isRTL: boolean;
   prescriptions: Prescription[];
   observationSessions: ObservationSession[];
   diaryEntries: DiaryEntry[];
@@ -57,6 +72,8 @@ interface AppContextValue {
     doseScheduleId: string;
   } | null;
   dismissDoseNotification: () => void;
+  setLanguage: (language: Language) => Promise<void>;
+  t: (key: TranslationKey, params?: TranslationParams) => string;
   login: (
     username: string,
     password: string,
@@ -95,6 +112,11 @@ interface AppContextValue {
     prescription: Prescription,
   ) => Promise<void>;
   deleteUserPrescription: (prescriptionId: string) => Promise<void>;
+  markPrescriptionDone: (prescriptionId: string) => Promise<void>;
+  updatePrescriptionTimeShift: (
+    prescriptionId: string,
+    timeShift: number,
+  ) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -104,11 +126,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
+  const [isLocaleChecking, setIsLocaleChecking] = useState(true);
+  const [language, setLanguageState] = useState<Language>("en");
   const [currentDoseNotification, setCurrentDoseNotification] = useState<{
     notification: Notifications.Notification;
     prescriptionId: string;
     doseScheduleId: string;
   } | null>(null);
+
+  const locale = getLocaleForLanguage(language);
+  const rtl = isRTL(language);
+
+  const t = useCallback(
+    (key: TranslationKey, params?: TranslationParams) =>
+      translate(language, key, params),
+    [language],
+  );
 
   const prescriptionsKey = React.useMemo(
     () => ([("app" as const), ("prescriptions" as const), patient?.id] as const),
@@ -161,6 +194,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const isLoading =
     isAuthChecking ||
+    isLocaleChecking ||
     (isAuthenticated &&
       (prescriptionsQuery.isPending ||
         observationSessionsQuery.isPending ||
@@ -168,8 +202,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         symptomDefinitionsQuery.isPending));
 
   useEffect(() => {
+    const loadLanguage = async () => {
+      try {
+        const storedLanguage = await AsyncStorage.getItem("preferredLanguage");
+        setLanguageState(
+          storedLanguage ? normalizeLanguage(storedLanguage) : detectPreferredLanguage(),
+        );
+      } catch (error) {
+        console.error("Failed to load preferred language:", error);
+        setLanguageState(detectPreferredLanguage());
+      } finally {
+        setIsLocaleChecking(false);
+      }
+    };
+
+    void loadLanguage();
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    if (isLocaleChecking) return;
+    void AsyncStorage.setItem("preferredLanguage", language);
+  }, [isLocaleChecking, language]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -426,6 +480,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
+  const markPrescriptionDoneMutation = useMutation({
+    mutationFn: markPrescriptionDoneService,
+    onSuccess: (updated) => {
+      queryClient.setQueryData(prescriptionsKey, updated);
+    },
+  });
+
+  const updateTimeShiftMutation = useMutation({
+    mutationFn: ({
+      prescriptionId,
+      timeShift,
+    }: {
+      prescriptionId: string;
+      timeShift: number;
+    }) => updatePrescriptionTimeShiftService(prescriptionId, timeShift),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(prescriptionsKey, updated);
+    },
+  });
+
   const markDoseTaken = useCallback(
     async (prescriptionId: string, doseScheduleId: string, note?: string) => {
       await markDoseTakenMutation.mutateAsync({
@@ -513,9 +587,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [updatePrescriptionMutation],
   );
 
+  const markPrescriptionDone = useCallback(
+    async (prescriptionId: string) => {
+      await markPrescriptionDoneMutation.mutateAsync(prescriptionId);
+    },
+    [markPrescriptionDoneMutation],
+  );
+
+  const updatePrescriptionTimeShift = useCallback(
+    async (prescriptionId: string, timeShift: number) => {
+      await updateTimeShiftMutation.mutateAsync({ prescriptionId, timeShift });
+    },
+    [updateTimeShiftMutation],
+  );
+
   const dismissDoseNotification = useCallback(() => {
     setCurrentDoseNotification(null);
     setIncomingDoseNotification(null);
+  }, []);
+
+  const setLanguage = useCallback(async (nextLanguage: Language) => {
+    setLanguageState(nextLanguage);
+    await AsyncStorage.setItem("preferredLanguage", nextLanguage);
   }, []);
 
   return (
@@ -524,11 +617,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         patient,
         isAuthenticated,
         isLoading,
+        language,
+        locale,
+        isRTL: rtl,
         prescriptions,
         observationSessions,
         diaryEntries,
         currentDoseNotification,
         dismissDoseNotification,
+        setLanguage,
+        t,
         login,
         logout,
         markDoseTaken,
@@ -544,6 +642,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addUserPrescription,
         updateUserPrescription,
         deleteUserPrescription,
+        markPrescriptionDone,
+        updatePrescriptionTimeShift,
       }}
     >
       {children}

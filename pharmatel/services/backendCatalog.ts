@@ -29,6 +29,7 @@ type ApiPharmacyDto = {
   phoneNumber?: string | null;
   lat?: number | null;
   lng?: number | null;
+  location?: unknown;
 };
 
 type ApiPharmacyMedicineDto = {
@@ -43,6 +44,12 @@ type NearbyParams = {
   lng: number;
 };
 
+type LocationLike = {
+  x?: unknown;
+  y?: unknown;
+  coordinates?: unknown;
+};
+
 export type SearchableMedicine = {
   id: string;
   name: string;
@@ -53,7 +60,34 @@ export type SearchableMedicine = {
 };
 
 const AUTH_TOKEN_KEY = "auth_token";
-const DEFAULT_NEARBY_PARAMS: NearbyParams = { lat: 40.7389, lng: -73.9903 };
+export const DEFAULT_NEARBY_PARAMS: NearbyParams = {
+  lat: 40.7389,
+  lng: -73.9903,
+};
+
+function haversineDistanceKm(from: NearbyParams, to: NearbyParams): number {
+  const earthRadiusKm = 6371;
+  const lat1 = (from.lat * Math.PI) / 180;
+  const lat2 = (to.lat * Math.PI) / 180;
+  const deltaLat = ((to.lat - from.lat) * Math.PI) / 180;
+  const deltaLng = ((to.lng - from.lng) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(lat1) *
+      Math.cos(lat2) *
+      Math.sin(deltaLng / 2) *
+      Math.sin(deltaLng / 2);
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(distanceKm: number): string {
+  if (distanceKm < 1) {
+    return `${Math.max(100, Math.round(distanceKm * 1000))} m`;
+  }
+
+  return `${distanceKm < 10 ? distanceKm.toFixed(1) : Math.round(distanceKm)} km`;
+}
 
 function fallbackCoordinates(index: number): { lat: number; lng: number } {
   const angle = ((index % 8) * Math.PI) / 4;
@@ -62,6 +96,44 @@ function fallbackCoordinates(index: number): { lat: number; lng: number } {
     lat: DEFAULT_NEARBY_PARAMS.lat + Math.sin(angle) * radius,
     lng: DEFAULT_NEARBY_PARAMS.lng + Math.cos(angle) * radius,
   };
+}
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function extractLocationCoordinates(location: unknown): {
+  lat: number | null;
+  lng: number | null;
+} {
+  if (!location || typeof location !== "object") {
+    return { lat: null, lng: null };
+  }
+
+  const candidate = location as LocationLike;
+  const x = toNumber(candidate.x);
+  const y = toNumber(candidate.y);
+  if (x != null && y != null) {
+    return { lat: y, lng: x };
+  }
+
+  const coordinates = candidate.coordinates;
+  if (Array.isArray(coordinates) && coordinates.length >= 2) {
+    const lng = toNumber(coordinates[0]);
+    const lat = toNumber(coordinates[1]);
+    if (lat != null && lng != null) {
+      return { lat, lng };
+    }
+  }
+
+  return { lat: null, lng: null };
 }
 
 function mapDosageForm(value?: string | null): Medicine["dosageForm"] {
@@ -134,6 +206,7 @@ export async function fetchMedicinesCatalog(
 
 export async function fetchPharmaciesForMedicine(
   medicineId: string,
+  userLocation: NearbyParams = DEFAULT_NEARBY_PARAMS,
 ): Promise<Pharmacy[]> {
   const numericMedicineId = Number.parseInt(medicineId, 10);
   if (!Number.isFinite(numericMedicineId)) {
@@ -142,8 +215,8 @@ export async function fetchPharmaciesForMedicine(
 
   const token = await getToken();
   const params = new URLSearchParams({
-    lat: String(DEFAULT_NEARBY_PARAMS.lat),
-    lng: String(DEFAULT_NEARBY_PARAMS.lng),
+    lat: String(userLocation.lat),
+    lng: String(userLocation.lng),
   });
 
   const nearby = await apiRequest<ApiPharmacyDto[]>(
@@ -155,18 +228,20 @@ export async function fetchPharmaciesForMedicine(
   if (nearby.length === 0) {
     return [];
   }
-
+  console.log(nearby);
   const medicineByPharmacyId = new Map<number, ApiPharmacyMedicineDto>();
   await Promise.all(
     nearby.map(async (pharmacy) => {
       try {
-        const medicines = await apiRequest<ApiPharmacyMedicineDto[]>(
-          `/pharmacies/${pharmacy.id}/medicines`,
+        const medicinesPage = await apiRequest<
+          ApiPageResponse<ApiPharmacyMedicineDto>
+        >(
+          `/pharmacies/${pharmacy.id}/medicines?page=0&size=200`,
           {},
           token,
         );
 
-        const match = medicines.find(
+        const match = medicinesPage.content.find(
           (item) => item.medicineId === numericMedicineId,
         );
         if (match) {
@@ -181,10 +256,17 @@ export async function fetchPharmaciesForMedicine(
   return nearby
     .map((pharmacy, index) => {
       const match = medicineByPharmacyId.get(pharmacy.id);
+      const locationCoordinates = extractLocationCoordinates(pharmacy.location);
+      const pharmacyLat = pharmacy.lat ?? locationCoordinates.lat;
+      const pharmacyLng = pharmacy.lng ?? locationCoordinates.lng;
 
       const fallback = fallbackCoordinates(index);
-      const lat = pharmacy.lat ?? fallback.lat;
-      const lng = pharmacy.lng ?? fallback.lng;
+      const hasCoordinates = pharmacyLat != null && pharmacyLng != null;
+      const lat = hasCoordinates ? pharmacyLat : fallback.lat;
+      const lng = hasCoordinates ? pharmacyLng : fallback.lng;
+      const distanceKm = hasCoordinates
+        ? haversineDistanceKm(userLocation, { lat, lng })
+        : undefined;
 
       return {
         id: String(pharmacy.id),
@@ -194,12 +276,22 @@ export async function fetchPharmaciesForMedicine(
         phone: pharmacy.phone ?? pharmacy.phoneNumber ?? undefined,
         lat,
         lng,
+        distance: distanceKm != null ? formatDistance(distanceKm) : undefined,
         inStock: (match?.quantity ?? 0) > 0,
         quantity: match?.quantity ?? 0,
-      } as Pharmacy;
+        _distanceKm: distanceKm,
+      } as Pharmacy & { _distanceKm?: number };
     })
     .sort((a, b) => {
+      if (
+        a._distanceKm != null &&
+        b._distanceKm != null &&
+        a._distanceKm !== b._distanceKm
+      ) {
+        return a._distanceKm - b._distanceKm;
+      }
       if (a.inStock !== b.inStock) return a.inStock ? -1 : 1;
       return (b.quantity ?? 0) - (a.quantity ?? 0);
-    });
+    })
+    .map(({ _distanceKm, ...pharmacy }) => pharmacy);
 }

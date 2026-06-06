@@ -23,6 +23,7 @@ export default function PrescriptionsScreen() {
   const insets = useSafeAreaInsets();
   const { prescriptions, refreshPrescriptions, deleteUserPrescription } =
     useApp();
+  const { t } = useApp();
   const [refreshing, setRefreshing] = useState(false);
 
   const topPadding = insets.top + (Platform.OS === "web" ? 67 : 0);
@@ -34,10 +35,10 @@ export default function PrescriptionsScreen() {
   };
 
   const handleDelete = (rxId: string, name: string) => {
-    Alert.alert("Remove Prescription", `Remove "${name}" from your schedule?`, [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("deletePrescriptionTitle"), t("deletePrescriptionMessage", { name }), [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Remove",
+        text: t("remove"),
         style: "destructive",
         onPress: () => {
           void (async () => {
@@ -47,8 +48,8 @@ export default function PrescriptionsScreen() {
               const message =
                 error instanceof Error && error.message
                   ? error.message
-                  : "Could not delete prescription. Please try again.";
-              Alert.alert("Delete failed", message);
+                  : t("removePrescriptionFailed");
+              Alert.alert(t("deleteFailed"), message);
             }
           })();
         },
@@ -64,10 +65,14 @@ export default function PrescriptionsScreen() {
   };
 
   const active = prescriptions.filter(
-    (rx) => !rx.endDate || new Date(rx.endDate) >= new Date(),
+    (rx) =>
+      !rx.isDone &&
+      (!rx.endDate || new Date(`${rx.endDate}T23:59:59`) >= new Date()),
   );
   const completed = prescriptions.filter(
-    (rx) => rx.endDate && new Date(rx.endDate) < new Date(),
+    (rx) =>
+      rx.isDone ||
+      Boolean(rx.endDate && new Date(`${rx.endDate}T23:59:59`) < new Date()),
   );
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -84,11 +89,10 @@ export default function PrescriptionsScreen() {
         <View style={styles.headerTop}>
           <View>
             <Text style={[styles.title, { color: colors.text }]}>
-              Prescription Schedule
+              {t("schedule")}
             </Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {active.length} active prescription
-              {active.length !== 1 ? "s" : ""}
+              {active.length} {t("activeRx")}
             </Text>
           </View>
           <Pressable
@@ -98,8 +102,8 @@ export default function PrescriptionsScreen() {
               { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
             ]}
           >
-            <Feather name="plus" size={18} color="#fff" />
-            <Text style={styles.addBtnText}>Add</Text>
+            <Feather name="plus" size={17} color="#fff" />
+            <Text style={styles.addBtnText}>{t("addPrescription")}</Text>
           </Pressable>
         </View>
       </View>
@@ -123,7 +127,7 @@ export default function PrescriptionsScreen() {
                 style={[styles.sectionDot, { backgroundColor: colors.success }]}
               />
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Active
+                {t("activeRx")}
               </Text>
             </View>
             {active.map((rx) => (
@@ -154,7 +158,7 @@ export default function PrescriptionsScreen() {
                 ]}
               />
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Completed
+                {t("completed")}
               </Text>
             </View>
             {completed.map((rx) => (
@@ -184,11 +188,10 @@ export default function PrescriptionsScreen() {
           >
             <Feather name="clipboard" size={40} color={colors.textMuted} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              No Prescriptions Yet
+              {t("addPrescription")}
             </Text>
             <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
-              Tap "Add" to schedule your own medications, or your doctor can add
-              them for you.
+              {t("scheduleYourMedications")}
             </Text>
             <Pressable
               onPress={() => router.push("/prescription/new")}
@@ -198,7 +201,7 @@ export default function PrescriptionsScreen() {
               ]}
             >
               <Feather name="plus" size={16} color="#fff" />
-              <Text style={styles.emptyAddText}>Add Prescription</Text>
+              <Text style={styles.emptyAddText}>{t("addPrescription")}</Text>
             </Pressable>
           </View>
         )}
@@ -223,7 +226,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: {
-    fontSize: 26,
+    fontSize: 20,
     fontFamily: "Inter_700Bold",
     letterSpacing: -0.5,
     marginTop: 8,

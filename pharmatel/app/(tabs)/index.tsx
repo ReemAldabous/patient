@@ -17,13 +17,13 @@ import { TakeDoseModal } from "@/components/TakeDoseModal";
 import { DoseCard } from "@/components/DoseCard";
 import { useApp } from "@/context/AppContext";
 import type { DoseSchedule, Prescription } from "@/models";
-import { getTodayFormatted } from "@/utils/time";
+import { getTodayFormatted, toLocalIso } from "@/utils/time";
 
 export default function TodayScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
   const insets = useSafeAreaInsets();
-  const { patient, prescriptions, markDoseTaken, refreshPrescriptions } = useApp();
+  const { patient, prescriptions, markDoseTaken, refreshPrescriptions, locale, t } = useApp();
 
   const [modalData, setModalData] = useState<{
     prescription: Prescription;
@@ -32,15 +32,22 @@ export default function TodayScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const todayDoses = useMemo(() => {
-    const result: { prescription: Prescription; doseSchedule: DoseSchedule }[] = [];
+    const today = toLocalIso();
+    const result: { prescription: Prescription; doseSchedule: DoseSchedule }[] =
+      [];
     for (const rx of prescriptions) {
+      if (rx.isDone) continue;
       for (const ds of rx.doseSchedules) {
+        const doseDay = ds.takeAt?.split("T")[0];
+        if (doseDay && doseDay !== today) continue;
         result.push({ prescription: rx, doseSchedule: ds });
       }
     }
-    return result.sort((a, b) =>
-      a.doseSchedule.scheduledTime.localeCompare(b.doseSchedule.scheduledTime)
-    );
+    return result.sort((a, b) => {
+      const aKey = a.doseSchedule.takeAt ?? a.doseSchedule.scheduledTime;
+      const bKey = b.doseSchedule.takeAt ?? b.doseSchedule.scheduledTime;
+      return aKey.localeCompare(bKey);
+    });
   }, [prescriptions]);
 
   const taken = todayDoses.filter((d) => d.doseSchedule.status === "taken").length;
@@ -78,14 +85,14 @@ export default function TodayScreen() {
         {/* Header */}
         <View style={[styles.header, { paddingTop: topPadding, backgroundColor: colors.surface, borderBottomColor: colors.borderLight }]}>
           <View>
-            <Text style={[styles.greeting, { color: colors.textSecondary }]}>
-              Good {getGreeting()},
+              <Text style={[styles.greeting, { color: colors.textSecondary }]}> 
+              {t(getGreetingKey())},
             </Text>
             <Text style={[styles.patientName, { color: colors.text }]}>
               {patient?.name?.split(" ")[0] ?? "Patient"}
             </Text>
             <Text style={[styles.date, { color: colors.textMuted }]}>
-              {getTodayFormatted()}
+              {getTodayFormatted(locale)}
             </Text>
           </View>
           <Pressable
@@ -112,9 +119,9 @@ export default function TodayScreen() {
           >
             <View style={styles.progressTop}>
               <View>
-                <Text style={styles.progressTitle}>Today's Progress</Text>
+                <Text style={styles.progressTitle}>{t("todaysProgress")}</Text>
                 <Text style={styles.progressSubtitle}>
-                  {taken} of {total} doses taken
+                  {t("dosesTakenOfTotal", { taken, total })}
                 </Text>
               </View>
               <View style={styles.progressCircle}>
@@ -136,19 +143,19 @@ export default function TodayScreen() {
           {/* Summary chips */}
           <View style={styles.chips}>
             <SummaryChip
-              label="Taken"
+              label={t("taken")}
               count={taken}
               color={colors.taken}
               bg={colors.takenBg}
             />
             <SummaryChip
-              label="Missed"
+              label={t("missed")}
               count={todayDoses.filter((d) => d.doseSchedule.status === "missed").length}
               color={colors.missed}
               bg={colors.missedBg}
             />
             <SummaryChip
-              label="Pending"
+              label={t("pending")}
               count={todayDoses.filter((d) => d.doseSchedule.status === "pending").length}
               color={colors.pending}
               bg={colors.pendingBg}
@@ -156,16 +163,16 @@ export default function TodayScreen() {
           </View>
 
           {/* Doses list */}
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Today's Doses
+          <Text style={[styles.sectionTitle, { color: colors.text }]}> 
+            {t("todaysDoses")}
           </Text>
 
           {todayDoses.length === 0 ? (
             <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Feather name="check-circle" size={40} color={colors.success} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>All Done!</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>{t("allDone")}</Text>
               <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
-                No doses scheduled for today.
+                {t("todayDosesEmpty")}
               </Text>
             </View>
           ) : (
@@ -224,11 +231,11 @@ function SummaryChip({
   );
 }
 
-function getGreeting(): string {
+function getGreetingKey(): "goodMorning" | "goodAfternoon" | "goodEvening" {
   const hour = new Date().getHours();
-  if (hour < 12) return "morning";
-  if (hour < 17) return "afternoon";
-  return "evening";
+  if (hour < 12) return "goodMorning";
+  if (hour < 17) return "goodAfternoon";
+  return "goodEvening";
 }
 
 const styles = StyleSheet.create({

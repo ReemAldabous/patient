@@ -1,7 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +14,12 @@ import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import { formatDate, foodRequirementLabel } from "@/utils/time";
 import { MedicineIconContainer } from "@/components/ui/MedicineIcon";
+import { FirstDoseTimeEditor } from "@/components/ui/FirstDoseTimeEditor";
+import {
+  hasConfiguredTimeShift,
+  shiftToTimeString,
+  timeStringToShift,
+} from "@/services/doseScheduler";
 
 export default function MedicineDetailScreen() {
   const { id, prescriptionId } = useLocalSearchParams<{
@@ -20,7 +28,16 @@ export default function MedicineDetailScreen() {
   }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
-  const { prescriptions } = useApp();
+  const {
+    prescriptions,
+    locale,
+    language,
+    t,
+    markPrescriptionDone,
+    updatePrescriptionTimeShift,
+  } = useApp();
+  const [firstDoseTime, setFirstDoseTime] = useState("08:00");
+  const [savingTime, setSavingTime] = useState(false);
 
   const prescription = useMemo(
     () => prescriptions.find((rx) => rx.id === prescriptionId),
@@ -28,11 +45,20 @@ export default function MedicineDetailScreen() {
   );
   const medicine = prescription?.medicine;
 
+  useEffect(() => {
+    if (!prescription) return;
+    setFirstDoseTime(
+      hasConfiguredTimeShift(prescription)
+        ? shiftToTimeString(prescription.timeShift!)
+        : "08:00",
+    );
+  }, [prescription?.id, prescription?.timeShift]);
+
   if (!medicine || !prescription) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={[styles.errorText, { color: colors.textMuted }]}>
-          Medication not found.
+          {t("medicationNotFound")}
         </Text>
       </View>
     );
@@ -63,50 +89,142 @@ export default function MedicineDetailScreen() {
 
         {/* Prescription details */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>Prescription Details</Text>
-          <DetailRow label="Dose" value={prescription.dose} colors={colors} icon="activity" />
-          <DetailRow label="Frequency" value={prescription.frequency} colors={colors} icon="repeat" />
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{t("prescriptionDetails")}</Text>
+          <DetailRow label={t("doseLabel")} value={prescription.dose} colors={colors} icon="activity" />
+          <DetailRow label={t("frequencyLabel")} value={prescription.frequency} colors={colors} icon="repeat" />
           <DetailRow
-            label="Food"
-            value={foodRequirementLabel(prescription.foodRequirement)}
+            label={t("foodRequirement")}
+            value={foodRequirementLabel(prescription.foodRequirement, language)}
             colors={colors}
             icon="coffee"
           />
           <DetailRow
-            label="Start Date"
-            value={formatDate(prescription.startDate)}
+            label={t("startDateLabel")}
+            value={formatDate(prescription.startDate, locale)}
             colors={colors}
             icon="calendar"
           />
           {prescription.endDate && (
             <DetailRow
-              label="End Date"
-              value={formatDate(prescription.endDate)}
+              label={t("endDateLabel")}
+              value={formatDate(prescription.endDate, locale)}
               colors={colors}
               icon="calendar"
             />
           )}
           <DetailRow
-            label="Prescribed By"
+            label={t("prescribedByLabel")}
             value={prescription.prescribedBy}
             colors={colors}
             icon="user"
           />
-          {prescription.notes && (
-            <DetailRow label="Notes" value={prescription.notes} colors={colors} icon="file-text" />
+          {(prescription.note ?? prescription.notes) && (
+            <DetailRow
+              label={t("yourNote")}
+              value={prescription.note ?? prescription.notes ?? ""}
+              colors={colors}
+              icon="file-text"
+            />
           )}
         </View>
 
+        {!prescription.isDone && (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              {t("firstDoseTime")}
+            </Text>
+            {!hasConfiguredTimeShift(prescription) && (
+              <Text
+                style={[styles.timeHint, { color: colors.textSecondary }]}
+              >
+                {t("timeShiftNotSet")}
+              </Text>
+            )}
+            <FirstDoseTimeEditor
+              value={firstDoseTime}
+              onChange={setFirstDoseTime}
+              colors={colors}
+              label={t("firstDoseTime")}
+            />
+            <Pressable
+              disabled={savingTime || firstDoseTime.length < 5}
+              onPress={() => {
+                void (async () => {
+                  setSavingTime(true);
+                  try {
+                    await updatePrescriptionTimeShift(
+                      prescription.id,
+                      timeStringToShift(firstDoseTime),
+                    );
+                  } catch {
+                    Alert.alert(t("deleteFailed"), t("saveTimeShift"));
+                  } finally {
+                    setSavingTime(false);
+                  }
+                })();
+              }}
+              style={({ pressed }) => [
+                styles.saveTimeBtn,
+                {
+                  backgroundColor: colors.primary,
+                  opacity:
+                    pressed || savingTime || firstDoseTime.length < 5
+                      ? 0.7
+                      : 1,
+                },
+              ]}
+            >
+              <Text style={styles.saveTimeBtnText}>
+                {savingTime ? t("saving") : t("saveTimeShift")}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+        {!prescription.isDone && (
+          <Pressable
+            onPress={() => {
+              Alert.alert(t("markPrescriptionDone"), "", [
+                { text: t("cancel"), style: "cancel" },
+                {
+                  text: t("remove"),
+                  onPress: () => {
+                    void markPrescriptionDone(prescription.id);
+                  },
+                },
+              ]);
+            }}
+            style={({ pressed }) => [
+              styles.doneBtn,
+              {
+                backgroundColor: colors.success + "18",
+                borderColor: colors.success + "40",
+                opacity: pressed ? 0.8 : 1,
+              },
+            ]}
+          >
+            <Feather name="check-circle" size={18} color={colors.success} />
+            <Text style={[styles.doneBtnText, { color: colors.success }]}>
+              {t("markPrescriptionDone")}
+            </Text>
+          </Pressable>
+        )}
+
         {/* Adherence */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>Adherence</Text>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{t("adherence")}</Text>
           <View style={styles.adherenceRow}>
             <View style={styles.adherenceLeft}>
               <Text style={[styles.adherencePercent, { color: colors.text }]}>
                 {adherence}%
               </Text>
               <Text style={[styles.adherenceLabel, { color: colors.textSecondary }]}>
-                {takenCount} of {totalCount} doses taken
+                {t("dosesTakenCount", { taken: takenCount, total: totalCount })}
               </Text>
             </View>
             <View style={styles.adherenceRight}>
@@ -121,8 +239,8 @@ export default function MedicineDetailScreen() {
                   ]}
                 />
               </View>
-              <Text style={[styles.adherenceStatus, { color: adherence >= 80 ? colors.success : colors.warning }]}>
-                {adherence >= 80 ? "Good" : adherence >= 50 ? "Fair" : "Needs improvement"}
+              <Text style={[styles.adherenceStatus, { color: adherence >= 80 ? colors.success : colors.warning }]}> 
+                {adherence >= 80 ? t("good") : adherence >= 50 ? t("fair") : t("needsImprovement")}
               </Text>
             </View>
           </View>
@@ -131,7 +249,7 @@ export default function MedicineDetailScreen() {
         {/* Description */}
         {medicine.description && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>About This Medication</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>{t("aboutThisMedication")}</Text>
             <Text style={[styles.description, { color: colors.textSecondary }]}>
               {medicine.description}
             </Text>
@@ -144,7 +262,7 @@ export default function MedicineDetailScreen() {
             <View style={styles.sideEffectsHeader}>
               <Feather name="alert-triangle" size={16} color={colors.warning} />
               <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 0 }]}>
-                Possible Side Effects
+                {t("possibleSideEffects")}
               </Text>
             </View>
             <View style={styles.sideEffectsList}>
@@ -248,6 +366,38 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontFamily: "Inter_600SemiBold",
     marginBottom: 12,
+  },
+  doneBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    marginBottom: 8,
+  },
+  doneBtnText: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  timeHint: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    marginBottom: 10,
+    lineHeight: 18,
+  },
+  saveTimeBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  saveTimeBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
   },
   detailRow: {
     flexDirection: "row",

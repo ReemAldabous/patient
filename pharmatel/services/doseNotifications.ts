@@ -2,6 +2,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { toLocalIso } from "@/utils/time";
 import type { DoseSchedule, Prescription } from "@/models";
+import { hasConfiguredTimeShift } from "./doseScheduler";
 
 const DOSE_PREFIX = "pharmatel-dose-";
 const ANDROID_CHANNEL = "dose-reminders";
@@ -43,6 +44,7 @@ function todayStr() {
 }
 
 function isPrescriptionActive(rx: Prescription): boolean {
+  if (rx.isDone || !hasConfiguredTimeShift(rx)) return false;
   const t = todayStr();
   if (rx.startDate > t) return false;
   if (rx.endDate && rx.endDate < t) return false;
@@ -132,8 +134,7 @@ export async function syncDoseReminderNotifications(
 }
 
 async function scheduleForDose(rx: Prescription, ds: DoseSchedule) {
-  const t = parseHHMM(ds.scheduledTime);
-  if (!t) return;
+  if (ds.status === "taken" || ds.status === "skipped") return;
 
   const body = `${rx.medicine.name} · ${rx.dose}`;
   const baseContent = {
@@ -142,7 +143,6 @@ async function scheduleForDose(rx: Prescription, ds: DoseSchedule) {
     body,
     data: { prescriptionId: rx.id, doseScheduleId: ds.id },
     sound: true as const,
-    // attach category so action buttons (TAKEN / IGNORE) show up
     categoryIdentifier: ANDROID_CATEGORY,
     ...(Platform.OS === "android"
       ? {
@@ -152,6 +152,25 @@ async function scheduleForDose(rx: Prescription, ds: DoseSchedule) {
         }
       : {}),
   };
+
+  if (ds.takeAt) {
+    const when = new Date(ds.takeAt);
+    if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+      return;
+    }
+    await Notifications.scheduleNotificationAsync({
+      identifier: doseNotificationIdentifier(rx.id, ds.id),
+      content: baseContent,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: when,
+      },
+    });
+    return;
+  }
+
+  const t = parseHHMM(ds.scheduledTime);
+  if (!t) return;
 
   const rawDays = ds.dayOfWeek?.map(
     (d) => WEEKDAY_NAME_TO_EXPO[d.trim().toLowerCase()],

@@ -20,7 +20,7 @@ export default function SignUpScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
   const insets = useSafeAreaInsets();
-  const { register } = useApp();
+  const { register, t } = useApp();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -42,7 +42,7 @@ export default function SignUpScreen() {
 
   const handleRegister = async () => {
     if (!canSubmit) {
-      setError("Please fill all required fields and make sure passwords match");
+      setError(t("fillRequiredFieldsAndMatchPasswords"));
       return;
     }
 
@@ -63,7 +63,7 @@ export default function SignUpScreen() {
       return;
     }
 
-    setError(result.error ?? "Registration failed");
+    setError(result.error ?? t("registrationFailed"));
     setLoading(false);
   };
 
@@ -90,10 +90,10 @@ export default function SignUpScreen() {
             <Feather name="user-plus" size={34} color="#fff" />
           </View>
           <Text style={[styles.appName, { color: colors.text }]}>
-            Create account
+            {t("createAccountTitle")}
           </Text>
           <Text style={[styles.tagline, { color: colors.textSecondary }]}>
-            Register as a patient
+            {t("createAccountSubtitle")}
           </Text>
         </View>
 
@@ -108,7 +108,7 @@ export default function SignUpScreen() {
           ]}
         >
           <Field
-            label="Username"
+            label={t("username")}
             value={username}
             onChangeText={setUsername}
             placeholder="john.doe"
@@ -118,7 +118,7 @@ export default function SignUpScreen() {
             autoCorrect={false}
           />
           <Field
-            label="Password"
+            label={t("password")}
             value={password}
             onChangeText={setPassword}
             placeholder="••••••••"
@@ -127,7 +127,7 @@ export default function SignUpScreen() {
             secureTextEntry
           />
           <Field
-            label="Confirm Password"
+            label={t("confirmPassword")}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             placeholder="••••••••"
@@ -139,7 +139,7 @@ export default function SignUpScreen() {
           {isPatient ? (
             <>
               <Field
-                label="Full Name"
+                label={t("fullName")}
                 value={name}
                 onChangeText={setName}
                 placeholder="John Doe"
@@ -147,7 +147,7 @@ export default function SignUpScreen() {
                 colors={colors}
               />
               <Field
-                label="Email"
+                label={t("email")}
                 value={email}
                 onChangeText={setEmail}
                 placeholder="john@example.com"
@@ -157,7 +157,7 @@ export default function SignUpScreen() {
                 keyboardType="email-address"
               />
               <Field
-                label="Phone Number"
+                label={t("phoneNumber")}
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
                 placeholder="+1 555 000 000"
@@ -169,7 +169,7 @@ export default function SignUpScreen() {
           ) : (
             <>
               <Field
-                label="Pharmacy Name"
+                label={t("pharmacyName")}
                 value={pharmacyName}
                 onChangeText={setPharmacyName}
                 placeholder="CityMed Pharmacy"
@@ -177,7 +177,7 @@ export default function SignUpScreen() {
                 colors={colors}
               />
               <Field
-                label="Pharmacist Name"
+                label={t("pharmacistName")}
                 value={pharmacistName}
                 onChangeText={setPharmacistName}
                 placeholder="Ahsan Rahman"
@@ -216,7 +216,7 @@ export default function SignUpScreen() {
             ]}
           >
             <Text style={styles.submitText}>
-              {loading ? "Creating account..." : "Create account"}
+              {loading ? t("creatingAccount") : t("createAccount")}
             </Text>
           </Pressable>
 
@@ -228,7 +228,7 @@ export default function SignUpScreen() {
             ]}
           >
             <Text style={[styles.backLinkText, { color: colors.primary }]}>
-              Back to sign in
+              {t("backToSignIn")}
             </Text>
           </Pressable>
         </View>

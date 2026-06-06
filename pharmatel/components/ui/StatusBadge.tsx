@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, View, useColorScheme } from "react-native";
 import Colors from "@/constants/colors";
+import { useApp } from "@/context/AppContext";
 
 type Status = "taken" | "missed" | "pending" | "skipped";
 
@@ -13,28 +14,29 @@ interface StatusBadgeProps {
 export function StatusBadge({ status, size = "md" }: StatusBadgeProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
+  const { t } = useApp();
 
   const config = {
     taken: {
-      label: "Taken",
+      label: t("taken"),
       icon: "check-circle" as const,
       color: colors.taken,
       bg: colors.takenBg,
     },
     missed: {
-      label: "Missed",
+      label: t("missed"),
       icon: "x-circle" as const,
       color: colors.missed,
       bg: colors.missedBg,
     },
     pending: {
-      label: "Pending",
+      label: t("pending"),
       icon: "clock" as const,
       color: colors.pending,
       bg: colors.pendingBg,
     },
     skipped: {
-      label: "Skipped",
+      label: t("skipped"),
       icon: "skip-forward" as const,
       color: colors.textMuted,
       bg: colors.surfaceSecondary,

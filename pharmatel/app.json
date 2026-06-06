@@ -39,6 +39,12 @@
       "expo-font",
       "expo-web-browser",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "PharmaTel uses your location to show nearby pharmacies and sort them by distance."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",

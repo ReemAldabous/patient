@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { MedicineIconContainer } from "@/components/ui/MedicineIcon";
+import { useApp } from "@/context/AppContext";
 import {
   fetchMedicinesCatalog,
   type SearchableMedicine,
@@ -28,6 +29,7 @@ export default function SearchScreen() {
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
+  const { t } = useApp();
 
   const [query, setQuery] = useState("");
   const [activeForm, setActiveForm] = useState(ALL_FORMS);
@@ -39,12 +41,9 @@ export default function SearchScreen() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const {
-    data: medicines = [],
-    isLoading,
-    isFetching,
-    error,
-  } = useQuery<SearchableMedicine[]>({
+  const { data: medicines = [], isLoading, isFetching, error } = useQuery<
+    SearchableMedicine[]
+  >({
     queryKey: ["catalog", "medicines", debouncedQuery],
     queryFn: () => fetchMedicinesCatalog(debouncedQuery),
   });
@@ -64,15 +63,17 @@ export default function SearchScreen() {
   }, [medicines]);
 
   const results = useMemo(() => {
-    if (activeForm === ALL_FORMS) {
-      return medicines;
-    }
+    if (activeForm === ALL_FORMS) return medicines;
     return medicines.filter((item) => item.dosageForm === activeForm);
   }, [activeForm, medicines]);
 
+  const resultsLabel =
+    results.length === 1
+      ? t("medicineFound", { count: results.length })
+      : t("medicinesFound", { count: results.length });
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
+    <View style={[styles.container, { backgroundColor: colors.background }]}> 
       <View
         style={[
           styles.header,
@@ -83,14 +84,11 @@ export default function SearchScreen() {
           },
         ]}
       >
-        <Text style={[styles.title, { color: colors.text }]}>
-          Find Medication
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Search and locate nearby pharmacies
+        <Text style={[styles.title, { color: colors.text }]}>{t("findMedication")}</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}> 
+          {t("searchAndLocateNearbyPharmacies")}
         </Text>
 
-        {/* Search bar */}
         <Pressable
           onPress={() => inputRef.current?.focus()}
           style={[
@@ -106,7 +104,7 @@ export default function SearchScreen() {
             ref={inputRef}
             value={query}
             onChangeText={setQuery}
-            placeholder="Search medications, generics..."
+            placeholder={t("searchMedicationsPlaceholder")}
             placeholderTextColor={colors.textMuted}
             style={[styles.searchInput, { color: colors.text }]}
             autoCapitalize="none"
@@ -114,20 +112,14 @@ export default function SearchScreen() {
             clearButtonMode="while-editing"
           />
           {query.length > 0 && Platform.OS !== "ios" && (
-            <Pressable onPress={() => setQuery("")}>
+            <Pressable onPress={() => setQuery("")}> 
               <Feather name="x-circle" size={16} color={colors.textMuted} />
             </Pressable>
           )}
         </Pressable>
       </View>
 
-      {/* Form chips */}
-      <View
-        style={[
-          styles.categoriesWrapper,
-          { borderBottomColor: colors.borderLight },
-        ]}
-      >
+      <View style={[styles.categoriesWrapper, { borderBottomColor: colors.borderLight }]}> 
         <FlatList
           horizontal
           data={dosageForms}
@@ -141,20 +133,15 @@ export default function SearchScreen() {
                 styles.categoryChip,
                 {
                   backgroundColor:
-                    activeForm === item
-                      ? colors.primary
-                      : colors.surfaceSecondary,
-                  borderColor:
-                    activeForm === item ? colors.primary : colors.border,
+                    activeForm === item ? colors.primary : colors.surfaceSecondary,
+                  borderColor: activeForm === item ? colors.primary : colors.border,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.categoryText,
-                  {
-                    color: activeForm === item ? "#fff" : colors.textSecondary,
-                  },
+                  { color: activeForm === item ? "#fff" : colors.textSecondary },
                 ]}
               >
                 {item}
@@ -164,7 +151,6 @@ export default function SearchScreen() {
         />
       </View>
 
-      {/* Results */}
       <FlatList
         data={results}
         keyExtractor={(item) => item.id}
@@ -176,32 +162,29 @@ export default function SearchScreen() {
             {isLoading || isFetching ? (
               <View style={styles.loadingRow}>
                 <ActivityIndicator size="small" color={colors.primary} />
-                <Text
-                  style={[styles.resultsCount, { color: colors.textMuted }]}
-                >
-                  Loading medicines...
+                <Text style={[styles.resultsCount, { color: colors.textMuted }]}>
+                  {t("loadingMedicines")}
                 </Text>
               </View>
             ) : error ? (
-              <Text style={[styles.resultsCount, { color: colors.error }]}>
-                {error instanceof Error ? error.message : "Failed to load medicines"}
+              <Text style={[styles.resultsCount, { color: colors.error }]}> 
+                {error instanceof Error ? error.message : t("failedToLoadMedicines")}
               </Text>
             ) : results.length > 0 ? (
-              <Text style={[styles.resultsCount, { color: colors.textMuted }]}>
-                {results.length} medication{results.length !== 1 ? "s" : ""}{" "}
-                found
+              <Text style={[styles.resultsCount, { color: colors.textMuted }]}> 
+                {resultsLabel}
               </Text>
             ) : null}
           </View>
         }
         ListEmptyComponent={
-          <View style={[styles.emptyState, { borderColor: colors.border }]}>
+          <View style={[styles.emptyState, { borderColor: colors.border }]}> 
             <Feather name="search" size={36} color={colors.textMuted} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              No results found
+            <Text style={[styles.emptyTitle, { color: colors.text }]}> 
+              {t("noResultsFound")}
             </Text>
-            <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
-              Try searching by medication name or changing dosage form.
+            <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}> 
+              {t("trySearchingByMedicationNameOrChangingDosageForm")}
             </Text>
           </View>
         }
@@ -225,53 +208,31 @@ export default function SearchScreen() {
           >
             <MedicineIconContainer form={item.dosageForm} size={46} />
             <View style={styles.resultInfo}>
-              <Text style={[styles.resultName, { color: colors.text }]}>
+              <Text style={[styles.resultName, { color: colors.text }]}> 
                 {item.name}
               </Text>
-              <Text
-                style={[styles.resultGeneric, { color: colors.textSecondary }]}
-              >
+              <Text style={[styles.resultGeneric, { color: colors.textSecondary }]}> 
                 {item.genericName}
               </Text>
               <View style={styles.resultMeta}>
-                <View
-                  style={[
-                    styles.categoryTag,
-                    { backgroundColor: colors.primary + "15" },
-                  ]}
-                >
-                  <Text
-                    style={[styles.categoryTagText, { color: colors.primary }]}
-                  >
+                <View style={[styles.categoryTag, { backgroundColor: colors.primary + "15" }]}> 
+                  <Text style={[styles.categoryTagText, { color: colors.primary }]}> 
                     {item.category}
                   </Text>
                 </View>
-                <Text
-                  style={[styles.strengthText, { color: colors.textMuted }]}
-                >
+                <Text style={[styles.strengthText, { color: colors.textMuted }]}> 
                   {item.strength} · {item.dosageForm}
                 </Text>
               </View>
             </View>
             <View style={styles.resultAction}>
-              <View
-                style={[
-                  styles.pharmaciesBtn,
-                  { backgroundColor: colors.primary + "12" },
-                ]}
-              >
+              <View style={[styles.pharmaciesBtn, { backgroundColor: colors.primary + "12" }]}> 
                 <Feather name="map-pin" size={12} color={colors.primary} />
-                <Text
-                  style={[styles.pharmaciesBtnText, { color: colors.primary }]}
-                >
-                  Find
+                <Text style={[styles.pharmaciesBtnText, { color: colors.primary }]}> 
+                  {t("find")}
                 </Text>
               </View>
-              <Feather
-                name="chevron-right"
-                size={16}
-                color={colors.textMuted}
-              />
+              <Feather name="chevron-right" size={16} color={colors.textMuted} />
             </View>
           </Pressable>
         )}
@@ -281,9 +242,7 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     paddingHorizontal: 20,
     paddingBottom: 14,
@@ -361,10 +320,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 12,
   },
-  resultInfo: {
-    flex: 1,
-    gap: 3,
-  },
+  resultInfo: { flex: 1, gap: 3 },
   resultName: {
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",

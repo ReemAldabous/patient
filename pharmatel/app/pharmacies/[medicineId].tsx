@@ -1,7 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
+import * as Location from "expo-location";
 import React, { useMemo, useState } from "react";
+import { useEffect } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -12,9 +14,13 @@ import {
   Pressable,
 } from "react-native";
 import Colors from "@/constants/colors";
+import { useApp } from "@/context/AppContext";
 import { LeafletMap } from "@/components/LeafletMap";
 import { PharmacyCard } from "@/components/PharmacyCard";
-import { fetchPharmaciesForMedicine } from "@/services/backendCatalog";
+import {
+  DEFAULT_NEARBY_PARAMS,
+  fetchPharmaciesForMedicine,
+} from "@/services/backendCatalog";
 import type { Pharmacy } from "@/models";
 
 export default function PharmaciesScreen() {
@@ -24,9 +30,61 @@ export default function PharmaciesScreen() {
   }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
+  const { t } = useApp();
   const [filterInStock, setFilterInStock] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const medicineIdParam = Array.isArray(medicineId) ? medicineId[0] : medicineId;
+  const [userLocation, setUserLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [locationState, setLocationState] = useState<
+    "loading" | "ready" | "denied" | "unavailable"
+  >("loading");
+  const medicineIdParam = Array.isArray(medicineId)
+    ? medicineId[0]
+    : medicineId;
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadLocation() {
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (!isActive) return;
+
+        if (permission.status !== "granted") {
+          setLocationState("denied");
+          return;
+        }
+
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        if (!isActive) return;
+
+        setUserLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setLocationState("ready");
+      } catch {
+        if (!isActive) return;
+        setLocationState("unavailable");
+      }
+    }
+
+    void loadLocation();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const effectiveLocation = userLocation ?? {
+    latitude: DEFAULT_NEARBY_PARAMS.lat,
+    longitude: DEFAULT_NEARBY_PARAMS.lng,
+  };
 
   const {
     data: allPharmacies = [],
@@ -34,9 +92,19 @@ export default function PharmaciesScreen() {
     isFetching,
     error,
   } = useQuery<Pharmacy[]>({
-    queryKey: ["catalog", "pharmacies", medicineIdParam],
-    queryFn: () => fetchPharmaciesForMedicine(medicineIdParam ?? ""),
-    enabled: Boolean(medicineIdParam),
+    queryKey: [
+      "catalog",
+      "pharmacies",
+      medicineIdParam,
+      effectiveLocation.latitude,
+      effectiveLocation.longitude,
+    ],
+    queryFn: () =>
+      fetchPharmaciesForMedicine(medicineIdParam ?? "", {
+        lat: effectiveLocation.latitude,
+        lng: effectiveLocation.longitude,
+      }),
+    enabled: Boolean(medicineIdParam) && locationState !== "loading",
   });
 
   const pharmacies = filterInStock
@@ -47,14 +115,24 @@ export default function PharmaciesScreen() {
   const pharmaciesWithCoordinates = pharmacies.filter(
     (item) => item.lat != null && item.lng != null,
   );
-
-  // Center map on selected pharmacy or average of all
-  const centerLat = selectedId
-    ? (allPharmacies.find((p) => p.id === selectedId)?.lat ?? 40.7389)
-    : (pharmaciesWithCoordinates[0]?.lat ?? 40.7389);
-  const centerLng = selectedId
-    ? (allPharmacies.find((p) => p.id === selectedId)?.lng ?? -73.9903)
-    : (pharmaciesWithCoordinates[0]?.lng ?? -73.9903);
+  const selectedPharmacy = allPharmacies.find(
+    (pharmacy) => pharmacy.id === selectedId,
+  );
+  const selectedMapPharmacy = pharmaciesWithCoordinates.find(
+    (pharmacy) => pharmacy.id === selectedId,
+  );
+  const centerLat =
+    selectedMapPharmacy?.lat ??
+    selectedPharmacy?.lat ??
+    userLocation?.latitude ??
+    pharmaciesWithCoordinates[0]?.lat ??
+    40.7389;
+  const centerLng =
+    selectedMapPharmacy?.lng ??
+    selectedPharmacy?.lng ??
+    userLocation?.longitude ??
+    pharmaciesWithCoordinates[0]?.lng ??
+    -73.9903;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -66,22 +144,43 @@ export default function PharmaciesScreen() {
         <View style={[styles.summaryCard, { backgroundColor: colors.primary }]}>
           <View style={styles.summaryLeft}>
             <Text style={styles.summaryMedicine}>
-              {medicineName ?? "Medication"}
+              {medicineName ?? t("medication")}
             </Text>
             <Text style={styles.summarySubtitle}>
-              Available at nearby pharmacies
+              {locationState === "ready"
+                ? t("availableNearYourLocation")
+                : t("availableAtNearbyPharmacies")}
             </Text>
           </View>
           <View style={styles.summaryRight}>
             <Text style={styles.summaryCount}>{inStockCount}</Text>
-            <Text style={styles.summaryCountLabel}>in stock</Text>
+            <Text style={styles.summaryCountLabel}>{t("inStockLabel")}</Text>
           </View>
         </View>
+
+        {locationState !== "ready" && (
+          <View
+            style={[
+              styles.infoBanner,
+              {
+                backgroundColor: colors.surfaceSecondary,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Feather name="map-pin" size={14} color={colors.textMuted} />
+            <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+              {locationState === "loading"
+                ? t("readingLocation")
+                : t("locationAccessOff")}
+            </Text>
+          </View>
+        )}
 
         {/* Filter row */}
         <View style={styles.filterRow}>
           <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>
-            {pharmacies.length} pharmacies found
+            {t("pharmaciesFound", { count: pharmacies.length })}
           </Text>
           <Pressable
             onPress={() => setFilterInStock((v) => !v)}
@@ -108,7 +207,7 @@ export default function PharmaciesScreen() {
                 },
               ]}
             >
-              {filterInStock ? "In Stock Only" : "All Pharmacies"}
+              {filterInStock ? t("inStockOnly") : t("allPharmacies")}
             </Text>
           </Pressable>
         </View>
@@ -117,7 +216,7 @@ export default function PharmaciesScreen() {
           <View style={styles.loadingState}>
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={[styles.filterLabel, { color: colors.textMuted }]}>
-              Loading pharmacies...
+              {t("loadingPharmacies")}
             </Text>
           </View>
         )}
@@ -134,7 +233,9 @@ export default function PharmaciesScreen() {
           >
             <Feather name="alert-triangle" size={14} color={colors.error} />
             <Text style={[styles.infoText, { color: colors.error }]}>
-              {error instanceof Error ? error.message : "Failed to load pharmacies"}
+              {error instanceof Error
+                ? error.message
+                : t("failedToLoadPharmacies")}
             </Text>
           </View>
         )}
@@ -144,9 +245,13 @@ export default function PharmaciesScreen() {
             {/* Leaflet map */}
             <View style={[styles.mapContainer, { borderColor: colors.border }]}>
               <LeafletMap
+                key={`${selectedId ?? "none"}-${centerLat}-${centerLng}-${pharmaciesWithCoordinates.length}`}
                 pharmacies={pharmaciesWithCoordinates}
                 centerLat={centerLat}
                 centerLng={centerLng}
+                userLat={userLocation?.latitude}
+                userLng={userLocation?.longitude}
+                selectedPharmacyId={selectedId ?? undefined}
                 height={280}
               />
               <View
@@ -165,7 +270,7 @@ export default function PharmaciesScreen() {
                   <Text
                     style={[styles.legendText, { color: colors.textSecondary }]}
                   >
-                    In Stock
+                    {t("inStockLabel")}
                   </Text>
                 </View>
                 <View style={styles.legendItem}>
@@ -178,7 +283,7 @@ export default function PharmaciesScreen() {
                   <Text
                     style={[styles.legendText, { color: colors.textSecondary }]}
                   >
-                    Out of Stock
+                    {t("outOfStockLabel")}
                   </Text>
                 </View>
               </View>
@@ -195,33 +300,35 @@ export default function PharmaciesScreen() {
             >
               <Feather name="info" size={14} color={colors.primary} />
               <Text style={[styles.infoText, { color: colors.primary }]}>
-                Tap a card to highlight a pharmacy on the map.
+                {t("mapCardHint")}
               </Text>
             </View>
           </>
         )}
 
-        {pharmaciesWithCoordinates.length === 0 && !isLoading && !isFetching && !error && (
-          <View
-            style={[
-              styles.infoBanner,
-              {
-                backgroundColor: colors.surfaceSecondary,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <Feather name="map" size={14} color={colors.textMuted} />
-            <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-              Map coordinates are not available from backend for these
-              pharmacies yet.
-            </Text>
-          </View>
-        )}
+        {pharmaciesWithCoordinates.length === 0 &&
+          !isLoading &&
+          !isFetching &&
+          !error && (
+            <View
+              style={[
+                styles.infoBanner,
+                {
+                  backgroundColor: colors.surfaceSecondary,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Feather name="map" size={14} color={colors.textMuted} />
+              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+                {t("mapCoordinatesUnavailable")}
+              </Text>
+            </View>
+          )}
 
         {/* Pharmacy list */}
         <Text style={[styles.sectionTitle, { color: colors.text }]}>
-          Nearby Pharmacies
+          {t("nearbyPharmacies")}
         </Text>
 
         {pharmacies.length === 0 ? (

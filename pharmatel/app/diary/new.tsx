@@ -34,6 +34,7 @@ function pad(n: number) {
 
 function nowTime() {
   const d = new Date();
+  console.log(d);
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 

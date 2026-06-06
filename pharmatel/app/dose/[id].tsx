@@ -29,7 +29,7 @@ export default function DoseDetailScreen() {
   }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
-  const { prescriptions, markDoseTaken, getSessionForDose } = useApp();
+  const { prescriptions, markDoseTaken, getSessionForDose, locale, language, t } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [session, setSession] = useState<ObservationSession | null>(null);
 
@@ -54,8 +54,8 @@ export default function DoseDetailScreen() {
   if (!prescription || !doseSchedule) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={[styles.errorText, { color: colors.textMuted }]}>
-          Dose not found.
+        <Text style={[styles.errorText, { color: colors.textMuted }]}> 
+          {t("doseNotFound")}
         </Text>
       </View>
     );
@@ -98,44 +98,44 @@ export default function DoseDetailScreen() {
           ]}
         >
           <Text style={[styles.cardTitle, { color: colors.text }]}>
-            Dose Details
+            {t("doseDetailsTitle")}
           </Text>
           <InfoRow
             icon="clock"
-            label="Scheduled Time"
+            label={t("scheduledTime")}
             value={formatTime(doseSchedule.scheduledTime)}
             colors={colors}
           />
           <InfoRow
             icon="activity"
-            label="Dose"
+            label={t("doseLabel")}
             value={prescription.dose}
             colors={colors}
           />
           <InfoRow
             icon="repeat"
-            label="Frequency"
+            label={t("frequencyLabel")}
             value={prescription.frequency}
             colors={colors}
           />
           <InfoRow
             icon="coffee"
-            label="Food Requirement"
-            value={foodRequirementLabel(prescription.foodRequirement)}
+            label={t("foodRequirement")}
+            value={foodRequirementLabel(prescription.foodRequirement, language)}
             colors={colors}
           />
           {doseSchedule.takenAt && (
             <InfoRow
               icon="check-circle"
-              label="Taken At"
-              value={formatDateTime(doseSchedule.takenAt)}
+              label={t("takenAt")}
+              value={formatDateTime(doseSchedule.takenAt, locale)}
               colors={colors}
             />
           )}
           {doseSchedule.patientNote && (
             <InfoRow
               icon="message-circle"
-              label="Your Note"
+              label={t("yourNote")}
               value={doseSchedule.patientNote}
               colors={colors}
             />
@@ -150,32 +150,32 @@ export default function DoseDetailScreen() {
           ]}
         >
           <Text style={[styles.cardTitle, { color: colors.text }]}>
-            Prescription Info
+            {t("prescriptionDetails")}
           </Text>
           <InfoRow
             icon="user"
-            label="Prescribed by"
+            label={t("prescribedByLabel")}
             value={prescription.prescribedBy}
             colors={colors}
           />
           <InfoRow
             icon="calendar"
-            label="Start Date"
-            value={formatDate(prescription.startDate)}
+            label={t("startDateLabel")}
+            value={formatDate(prescription.startDate, locale)}
             colors={colors}
           />
           {prescription.endDate && (
             <InfoRow
               icon="calendar"
-              label="End Date"
-              value={formatDate(prescription.endDate)}
+              label={t("endDateLabel")}
+              value={formatDate(prescription.endDate, locale)}
               colors={colors}
             />
           )}
           {prescription.notes && (
             <InfoRow
               icon="info"
-              label="Notes"
+              label={t("medicationDetail")}
               value={prescription.notes}
               colors={colors}
             />
@@ -192,11 +192,11 @@ export default function DoseDetailScreen() {
           >
             <View style={styles.sessionHeader}>
               <Text style={[styles.cardTitle, { color: colors.text }]}>
-                Symptom Diary
+                {t("symptomDiaryTitle")}
               </Text>
               <Pressable onPress={() => router.push("/(tabs)/diary")}>
                 <Text style={[styles.editLink, { color: colors.primary }]}>
-                  Edit
+                  {t("updateEntry")}
                 </Text>
               </Pressable>
             </View>
@@ -211,8 +211,8 @@ export default function DoseDetailScreen() {
                 <Text style={[styles.obsValue, { color: colors.text }]}>
                   {obs.symptomDefinition.type === "boolean"
                     ? obs.value
-                      ? "Yes"
-                      : "No"
+                      ? t("yes")
+                      : t("no")
                     : `${obs.value}${obs.symptomDefinition.unit ?? ""}`}
                 </Text>
               </View>
@@ -234,12 +234,12 @@ export default function DoseDetailScreen() {
               <Feather name="book" size={20} color={colors.secondary} />
               <View style={styles.diaryBtnText}>
                 <Text style={[styles.diaryBtnTitle, { color: colors.text }]}>
-                  Add Symptom Diary
+                  {t("addSymptomDiary")}
                 </Text>
                 <Text
                   style={[styles.diaryBtnSub, { color: colors.textSecondary }]}
                 >
-                  Record how you felt after taking this dose
+                  {t("recordHowFelt")}
                 </Text>
               </View>
               <Feather
@@ -261,7 +261,7 @@ export default function DoseDetailScreen() {
             ]}
           >
             <Feather name="check-circle" size={20} color="#fff" />
-            <Text style={styles.takeBtnText}>Mark as Taken</Text>
+            <Text style={styles.takeBtnText}>{t("markAsTaken")}</Text>
           </Pressable>
         )}
 
@@ -286,7 +286,7 @@ export default function DoseDetailScreen() {
         >
           <Feather name="info" size={18} color={colors.primary} />
           <Text style={[styles.infoBtnText, { color: colors.primary }]}>
-            View Medication Details
+            {t("viewMedicationDetails")}
           </Text>
           <Feather name="chevron-right" size={16} color={colors.primary} />
         </Pressable>

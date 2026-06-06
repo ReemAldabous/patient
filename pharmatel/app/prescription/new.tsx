@@ -137,8 +137,6 @@ function StepBar({
     </View>
   );
 }
-const STEP_LABELS = ["", "Medication", "Dosage & Timing", "Details"];
-
 const sb = StyleSheet.create({
   row: {
     flexDirection: "row",
@@ -441,6 +439,7 @@ export default function NewPrescriptionScreen() {
     updateUserPrescription,
     prescriptions,
     patient,
+    t,
   } = useApp();
 
   const [step, setStep] = useState(1);
@@ -467,10 +466,17 @@ export default function NewPrescriptionScreen() {
   const [startDate, setStartDate] = useState(todayStr());
   const [hasEndDate, setHasEndDate] = useState(false);
   const [endDate, setEndDate] = useState("");
-  const [prescribedBy, setPrescribedBy] = useState("Myself");
+  const [byDoctor, setByDoctor] = useState(false);
+  const [doctorName, setDoctorName] = useState("");
   const [notes, setNotes] = useState("");
 
   const [saving, setSaving] = useState(false);
+  const stepLabel =
+    step === 1
+      ? t("medication")
+      : step === 2
+        ? t("schedule")
+        : t("additionalDetails");
 
   useEffect(() => {
     if (!isEdit || !prescriptionId) return;
@@ -498,8 +504,9 @@ export default function NewPrescriptionScreen() {
     setStartDate(existing.startDate.slice(0, 10));
     setHasEndDate(Boolean(existing.endDate));
     setEndDate(existing.endDate ? existing.endDate.slice(0, 10) : "");
-    setPrescribedBy(existing.prescribedBy || "Myself");
-    setNotes(existing.notes ?? "");
+    setByDoctor(Boolean(existing.byDoctor));
+    setDoctorName(existing.doctorName ?? existing.prescribedBy ?? "");
+    setNotes(existing.note ?? existing.notes ?? "");
   }, [isEdit, prescriptionId, prescriptions]);
 
   useEffect(() => {
@@ -562,9 +569,15 @@ export default function NewPrescriptionScreen() {
             strength: selectedMed!.strength,
           };
 
-      const rxId = `rx_user_${uid()}`;
+      const rxId = prescriptionId ?? `local_${uid()}`;
+      const trimmedDoctor = doctorName.trim();
+      const existingRx =
+        isEdit && prescriptionId
+          ? prescriptions.find((item) => item.id === prescriptionId)
+          : undefined;
+
       const prescription: Prescription = {
-        id: prescriptionId ?? rxId,
+        id: rxId,
         patientId: patient?.id ?? "patient_001",
         medicineId: medId,
         medicine,
@@ -573,9 +586,13 @@ export default function NewPrescriptionScreen() {
         foodRequirement: foodReq,
         startDate,
         ...(hasEndDate && endDate ? { endDate } : {}),
-        prescribedBy: prescribedBy.trim() || "Myself",
-        ...(notes.trim() ? { notes: notes.trim() } : {}),
-        doseSchedules: [],
+        prescribedBy: byDoctor ? trimmedDoctor || "Doctor" : "Myself",
+        byDoctor,
+        ...(byDoctor && trimmedDoctor ? { doctorName: trimmedDoctor } : {}),
+        ...(notes.trim() ? { note: notes.trim() } : {}),
+        isDone: existingRx?.isDone ?? false,
+        ...(existingRx?.timeShift != null ? { timeShift: existingRx.timeShift } : {}),
+        doseSchedules: existingRx?.doseSchedules ?? [],
       };
 
       if (isEdit && prescriptionId) {
@@ -614,7 +631,7 @@ export default function NewPrescriptionScreen() {
       >
         <StepBar step={step} colors={colors} />
         <Text style={[styles.stepLabel, { color: colors.textSecondary }]}>
-          {STEP_LABELS[step]}
+          {stepLabel}
         </Text>
       </View>
 
@@ -634,7 +651,7 @@ export default function NewPrescriptionScreen() {
           {/* ══════════ STEP 1 ══════════ */}
           {step === 1 && (
             <View style={styles.stepContent}>
-              <SectionHeader title="Search medication" colors={colors} />
+              <SectionHeader title={t("searchMedication")} colors={colors} />
 
               {/* search input */}
               <View
@@ -651,7 +668,7 @@ export default function NewPrescriptionScreen() {
                   style={[styles.searchInput, { color: colors.text }]}
                   value={search}
                   onChangeText={setSearch}
-                  placeholder="Search by name, generic, or category…"
+                  placeholder={t("searchByNameGenericOrCategory")}
                   placeholderTextColor={colors.textMuted}
                   autoCapitalize="none"
                   clearButtonMode="while-editing"
@@ -664,7 +681,7 @@ export default function NewPrescriptionScreen() {
                   <Text
                     style={[styles.loadingText, { color: colors.textMuted }]}
                   >
-                    Loading medicines...
+                    {t("loadingMedicinesShort")}
                   </Text>
                 </View>
               )}
@@ -687,7 +704,7 @@ export default function NewPrescriptionScreen() {
                   <Text style={[styles.asNeededText, { color: colors.error }]}>
                     {medicinesError instanceof Error
                       ? medicinesError.message
-                      : "Failed to load medicines"}
+                      : t("failedToLoadMedicinesShort")}
                   </Text>
                 </View>
               )}
@@ -728,7 +745,7 @@ export default function NewPrescriptionScreen() {
                           { color: colors.textSecondary },
                         ]}
                       >
-                        No medications found for "{search}"
+                        {t("noMedicationsFoundFor", { search })}
                       </Text>
                     </View>
                   )}
@@ -765,9 +782,9 @@ export default function NewPrescriptionScreen() {
                     },
                   ]}
                 >
-                  {useCustom
-                    ? "Adding custom medication"
-                    : "My medication isn't listed — add custom"}
+                    {useCustom
+                      ? t("addingCustomMedication")
+                      : t("medicationNotListedAddCustom")}
                 </Text>
               </Pressable>
 
@@ -783,8 +800,7 @@ export default function NewPrescriptionScreen() {
                 >
                   <Feather name="info" size={15} color={colors.error} />
                   <Text style={[styles.asNeededText, { color: colors.error }]}>
-                    Enter the medication name only. The app will resolve the
-                    backend id when you save.
+                    {t("enterMedicationNameOnly")}
                   </Text>
                 </View>
               )}
@@ -801,14 +817,14 @@ export default function NewPrescriptionScreen() {
                   ]}
                 >
                   <SectionHeader
-                    title="Custom medication name"
+                    title={t("customMedicationName")}
                     colors={colors}
                   />
 
                   <Text
                     style={[styles.fieldLabel, { color: colors.textSecondary }]}
                   >
-                    Medication name *
+                    {t("medicationNameRequired")}
                   </Text>
                   <TextInput
                     style={[
@@ -821,7 +837,7 @@ export default function NewPrescriptionScreen() {
                     ]}
                     value={customName}
                     onChangeText={setCustomName}
-                    placeholder="e.g. Paracetamol"
+                    placeholder={t("exampleMedicationName")}
                     placeholderTextColor={colors.textMuted}
                   />
                 </View>
@@ -856,18 +872,18 @@ export default function NewPrescriptionScreen() {
                     ]}
                   >
                     {useCustom
-                      ? "Custom medication"
+                      ? t("customMedicationName")
                       : `${selectedMed?.strength} · ${selectedMed?.dosageForm}`}
                   </Text>
                 </View>
                 <Pressable onPress={goBack} hitSlop={8}>
                   <Text style={[styles.changeText, { color: colors.primary }]}>
-                    Change
+                    {t("change")}
                   </Text>
                 </Pressable>
               </View>
 
-              <SectionHeader title="Dose amount" colors={colors} />
+              <SectionHeader title={t("doseAmount")} colors={colors} />
               <TextInput
                 style={[
                   styles.textField,
@@ -883,7 +899,7 @@ export default function NewPrescriptionScreen() {
                 placeholderTextColor={colors.textMuted}
               />
 
-              <SectionHeader title="Frequency" colors={colors} />
+              <SectionHeader title={t("frequencyLabel")} colors={colors} />
               <View style={styles.chipGrid}>
                 {FREQUENCIES.map((f) => (
                   <Pressable
@@ -917,7 +933,7 @@ export default function NewPrescriptionScreen() {
                 ))}
               </View>
 
-              <SectionHeader title="Food requirement" colors={colors} />
+              <SectionHeader title={t("foodRequirementLabel")} colors={colors} />
               <View style={styles.chipGrid}>
                 {FOOD_OPTIONS.map((f) => (
                   <Pressable
@@ -969,8 +985,7 @@ export default function NewPrescriptionScreen() {
                 <Text
                   style={[styles.asNeededText, { color: colors.textSecondary }]}
                 >
-                  Dose times are generated automatically by the backend based on
-                  frequency and dates.
+                  {t("doseTimeBackendMessage")}
                 </Text>
               </View>
             </View>
@@ -979,12 +994,12 @@ export default function NewPrescriptionScreen() {
           {/* ══════════ STEP 3 ══════════ */}
           {step === 3 && (
             <View style={styles.stepContent}>
-              <SectionHeader title="Dates" colors={colors} />
+              <SectionHeader title={t("dates")} colors={colors} />
 
               <Text
                 style={[styles.fieldLabel, { color: colors.textSecondary }]}
               >
-                Start date *
+                {t("startDateRequired")}
               </Text>
               <DateTimeField
                 value={startDate}
@@ -1035,7 +1050,7 @@ export default function NewPrescriptionScreen() {
                     },
                   ]}
                 >
-                  Add end date (optional)
+                  {t("addEndDateOptional")}
                 </Text>
               </Pressable>
 
@@ -1047,7 +1062,7 @@ export default function NewPrescriptionScreen() {
                       { color: colors.textSecondary, marginTop: 10 },
                     ]}
                   >
-                    End date
+                    {t("endDateLabelForm")}
                   </Text>
                   <DateTimeField
                     value={endDate}
@@ -1060,36 +1075,103 @@ export default function NewPrescriptionScreen() {
                 </>
               )}
 
-              <SectionHeader title="Additional details" colors={colors} />
+              <SectionHeader title={t("additionalDetails")} colors={colors} />
 
-              <Text
-                style={[styles.fieldLabel, { color: colors.textSecondary }]}
-              >
-                Prescribed by
-              </Text>
-              <View
-                style={[
-                  styles.iconField,
+              {!isEdit && (
+                <View
+                  style={[
+                    styles.asNeededNote,
+                    {
+                      backgroundColor: colors.primary + "10",
+                      borderColor: colors.primary + "25",
+                    },
+                  ]}
+                >
+                  <Feather name="clock" size={15} color={colors.primary} />
+                  <Text
+                    style={[styles.asNeededText, { color: colors.primary }]}
+                  >
+                    {t("setTimeShiftAfterCreate")}
+                  </Text>
+                </View>
+              )}
+
+              <Pressable
+                onPress={() => setByDoctor((v) => !v)}
+                style={({ pressed }) => [
+                  styles.toggleRow,
                   {
-                    backgroundColor: colors.surfaceSecondary,
-                    borderColor: colors.border,
+                    backgroundColor: byDoctor
+                      ? colors.primary + "10"
+                      : colors.surfaceSecondary,
+                    borderColor: byDoctor
+                      ? colors.primary + "40"
+                      : colors.border,
+                    opacity: pressed ? 0.75 : 1,
                   },
                 ]}
               >
-                <Feather name="user" size={15} color={colors.textMuted} />
-                <TextInput
-                  style={[styles.iconFieldInput, { color: colors.text }]}
-                  value={prescribedBy}
-                  onChangeText={setPrescribedBy}
-                  placeholder="e.g. Myself, Dr. Smith"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
+                <View
+                  style={[
+                    styles.toggleDot,
+                    {
+                      backgroundColor: byDoctor
+                        ? colors.primary
+                        : colors.textMuted,
+                    },
+                  ]}
+                >
+                  {byDoctor && (
+                    <Feather name="check" size={12} color="#fff" />
+                  )}
+                </View>
+                <Text
+                  style={[
+                    styles.toggleLabel,
+                    {
+                      color: byDoctor ? colors.primary : colors.textSecondary,
+                    },
+                  ]}
+                >
+                  {t("prescribedByDoctor")}
+                </Text>
+              </Pressable>
+
+              {byDoctor && (
+                <>
+                  <Text
+                    style={[
+                      styles.fieldLabel,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    {t("doctorName")}
+                  </Text>
+                  <View
+                    style={[
+                      styles.iconField,
+                      {
+                        backgroundColor: colors.surfaceSecondary,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Feather name="user" size={15} color={colors.textMuted} />
+                    <TextInput
+                      style={[styles.iconFieldInput, { color: colors.text }]}
+                      value={doctorName}
+                      onChangeText={setDoctorName}
+                      placeholder={t("examplePrescriber")}
+                      placeholderTextColor={colors.textMuted}
+                    />
+                  </View>
+                </>
+              )}
 
               <Text
                 style={[styles.fieldLabel, { color: colors.textSecondary }]}
               >
-                Notes (optional)
+                {t("notesOptional")}
               </Text>
               <TextInput
                 style={[
@@ -1102,7 +1184,7 @@ export default function NewPrescriptionScreen() {
                 ]}
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Any special instructions or reminders…"
+                placeholder={t("specialInstructionsPlaceholder")}
                 placeholderTextColor={colors.textMuted}
                 multiline
                 numberOfLines={3}
@@ -1120,11 +1202,11 @@ export default function NewPrescriptionScreen() {
                 ]}
               >
                 <Text style={[styles.summaryTitle, { color: colors.text }]}>
-                  Summary
+                  {t("summaryTitle")}
                 </Text>
                 <SummaryRow
                   icon="package"
-                  label="Medication"
+                  label={t("medicationLabel")}
                   value={
                     useCustom
                       ? customName
@@ -1134,19 +1216,19 @@ export default function NewPrescriptionScreen() {
                 />
                 <SummaryRow
                   icon="droplet"
-                  label="Dose"
+                  label={t("doseLabel")}
                   value={dose}
                   colors={colors}
                 />
                 <SummaryRow
                   icon="repeat"
-                  label="Frequency"
+                  label={t("frequencyLabel")}
                   value={frequency}
                   colors={colors}
                 />
                 <SummaryRow
                   icon="coffee"
-                  label="Food"
+                  label={t("foodRequirementLabel")}
                   value={
                     FOOD_OPTIONS.find((f) => f.value === foodReq)?.label ?? ""
                   }
@@ -1154,7 +1236,7 @@ export default function NewPrescriptionScreen() {
                 />
                 <SummaryRow
                   icon="calendar"
-                  label="Starts"
+                  label={t("startsLabel")}
                   value={startDate}
                   colors={colors}
                 />
@@ -1185,7 +1267,7 @@ export default function NewPrescriptionScreen() {
           >
             <Feather name="arrow-left" size={16} color={colors.textSecondary} />
             <Text style={[styles.backBtnText, { color: colors.textSecondary }]}>
-              Back
+              {t("back")}
             </Text>
           </Pressable>
         )}
@@ -1199,7 +1281,7 @@ export default function NewPrescriptionScreen() {
           >
             <Feather name="x" size={16} color={colors.textSecondary} />
             <Text style={[styles.backBtnText, { color: colors.textSecondary }]}>
-              Cancel
+              {t("cancel")}
             </Text>
           </Pressable>
         )}
@@ -1217,7 +1299,7 @@ export default function NewPrescriptionScreen() {
               },
             ]}
           >
-            <Text style={styles.nextBtnText}>Continue</Text>
+            <Text style={styles.nextBtnText}>{t("continue")}</Text>
             <Feather name="arrow-right" size={16} color="#fff" />
           </Pressable>
         ) : (
@@ -1239,10 +1321,10 @@ export default function NewPrescriptionScreen() {
             />
             <Text style={styles.nextBtnText}>
               {saving
-                ? "Saving…"
+                ? t("saving")
                 : isEdit
-                  ? "Update Prescription"
-                  : "Save Prescription"}
+                  ? t("updatePrescription")
+                  : t("savePrescription")}
             </Text>
           </Pressable>
         )}

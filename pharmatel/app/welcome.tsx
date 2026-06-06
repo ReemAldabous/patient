@@ -28,7 +28,7 @@ export default function WelcomeScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
   const insets = useSafeAreaInsets();
-  const { isAuthenticated } = useApp();
+  const { isAuthenticated, t } = useApp();
 
   // Animation values
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -232,7 +232,7 @@ export default function WelcomeScreen() {
             transform: [{ translateY: slideAnim }],
           }}
         >
-          <Text style={styles.title}>PharmaTel</Text>
+          <Text style={styles.title}>{t("appName")}</Text>
         </Animated.View>
       </LinearGradient>
 
@@ -286,11 +286,10 @@ export default function WelcomeScreen() {
           </LinearGradient>
           <View style={styles.featureContent}>
             <Text style={[styles.featureTitle, { color: colors.text }]}>
-              🔔 Smart Notifications
+              🔔 {t("smartNotifications")}
             </Text>
             <Text style={[styles.featureDesc, { color: colors.textSecondary }]}>
-              AI-powered reminders that learn your patterns and never let you
-              miss a dose.
+              {t("welcomeFeature2")}
             </Text>
           </View>
           <View
@@ -330,11 +329,10 @@ export default function WelcomeScreen() {
           </LinearGradient>
           <View style={styles.featureContent}>
             <Text style={[styles.featureTitle, { color: colors.text }]}>
-              📊 Health Analytics
+              📊 {t("healthAnalytics")}
             </Text>
             <Text style={[styles.featureDesc, { color: colors.textSecondary }]}>
-              Comprehensive insights into your medication adherence and health
-              trends.
+              {t("welcomeFeature1")}
             </Text>
           </View>
           <View style={[styles.featureBadge, { backgroundColor: "#4F46E5" }]}>
@@ -372,11 +370,10 @@ export default function WelcomeScreen() {
           </LinearGradient>
           <View style={styles.featureContent}>
             <Text style={[styles.featureTitle, { color: colors.text }]}>
-              🗺️ Smart Locator
+              🗺️ {t("smartLocator")}
             </Text>
             <Text style={[styles.featureDesc, { color: colors.textSecondary }]}>
-              Instant pharmacy discovery with real-time inventory and
-              directions.
+              {t("welcomeFeature3")}
             </Text>
           </View>
           <View style={[styles.featureBadge, { backgroundColor: "#2e4cd0" }]}>
@@ -417,9 +414,7 @@ export default function WelcomeScreen() {
               <View style={styles.ctaContent}>
                 <AntDesign name="rocket" size={24} color="#fff" />
                 <Text style={styles.ctaText}>
-                  {isAuthenticated
-                    ? "Continue Your Journey"
-                    : "Start Your Health Journey"}
+                  {isAuthenticated ? t("continueYourJourney") : t("startYourHealthJourney")}
                 </Text>
                 <MaterialIcons name="arrow-forward" size={24} color="#fff" />
               </View>

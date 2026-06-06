@@ -7,6 +7,9 @@ interface LeafletMapProps {
   pharmacies: Pharmacy[];
   centerLat?: number;
   centerLng?: number;
+  userLat?: number;
+  userLng?: number;
+  selectedPharmacyId?: string;
   height?: number;
 }
 
@@ -14,12 +17,16 @@ export function LeafletMap({
   pharmacies,
   centerLat = 40.7128,
   centerLng = -74.006,
+  userLat,
+  userLng,
+  selectedPharmacyId,
   height = 280,
 }: LeafletMapProps) {
   const markersJs = pharmacies
     .filter((ph) => ph.lat != null && ph.lng != null)
     .map((ph) => {
-      const color = ph.inStock ? "#10B981" : "#EF4444";
+      const isSelected = selectedPharmacyId === ph.id;
+      const color = isSelected ? "#0A7EA4" : ph.inStock ? "#10B981" : "#EF4444";
       const label = ph.inStock ? "In Stock" : "Out of Stock";
       const safeAddress = (ph.address ?? "Address unavailable").replace(
         /'/g,
@@ -27,15 +34,16 @@ export function LeafletMap({
       );
       const safePhone = (ph.phone ?? "").replace(/'/g, "\\'");
       return `
-        var marker${ph.id.replace(/[^a-z0-9]/gi, "")} = L.marker([${ph.lat}, ${ph.lng}], {
+        markersById[${JSON.stringify(ph.id)}] = L.marker([${ph.lat}, ${ph.lng}], {
           icon: L.divIcon({
             className: '',
-            html: '<div style="position:relative;width:20px;height:20px;display:flex;align-items:center;justify-content:center;"><div style="position:absolute;left:4px;top:2px;width:12px;height:12px;background:${color};border:2px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(0,0,0,0.28)"></div><div style="position:absolute;left:8px;top:7px;width:4px;height:4px;background:white;border-radius:50%"></div></div>',
-            iconSize: [20, 20],
-            iconAnchor: [10, 18],
+            html: '<div style="position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center;"><div style="position:absolute;left:5px;top:3px;width:14px;height:14px;background:${color};border:2px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(0,0,0,0.28);${isSelected ? "transform:rotate(-45deg) scale(1.15);" : ""}"></div><div style="position:absolute;left:10px;top:9px;width:4px;height:4px;background:white;border-radius:50%"></div></div>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 20],
           })
         }).addTo(map)
           .bindPopup('<div style="font-family:sans-serif;min-width:170px"><b style="font-size:14px">${ph.name.replace(/'/g, "\\'")}</b><br/><span style="color:#6B7280;font-size:12px">${safeAddress}</span>${safePhone ? `<br/><span style="color:#374151;font-size:12px">📞 ${safePhone}</span>` : ""}<br/><span style="color:${color};font-weight:600;font-size:12px">${label}</span>${ph.price ? `<br/><span style="color:#0A7EA4;font-size:13px;font-weight:600">${ph.price}</span>` : ""}</div>');
+        ${isSelected ? `selectedMarker = markersById[${JSON.stringify(ph.id)}];` : ""}
       `;
     })
     .join("\n");
@@ -59,27 +67,42 @@ export function LeafletMap({
   <div id="map"></div>
   <script>
     var map = L.map('map', { zoomControl: true, attributionControl: false }).setView([${centerLat}, ${centerLng}], 13);
+    var markersById = {};
+    var selectedMarker = null;
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
     }).addTo(map);
 
-    // Center marker (user location indicator)
-    L.circle([${centerLat}, ${centerLng}], {
+    ${
+      userLat != null && userLng != null
+        ? `
+    // User location marker
+    L.circle([${userLat}, ${userLng}], {
       color: '#0A7EA4',
       fillColor: '#0A7EA4',
       fillOpacity: 0.15,
       radius: 500,
       weight: 2,
     }).addTo(map);
-    L.circleMarker([${centerLat}, ${centerLng}], {
+    L.circleMarker([${userLat}, ${userLng}], {
       radius: 7,
       color: 'white',
       fillColor: '#0A7EA4',
       fillOpacity: 1,
       weight: 3,
     }).addTo(map).bindPopup('<b>Your location</b>');
+    `
+        : ""
+    }
 
     ${markersJs}
+
+    if (selectedMarker) {
+      map.whenReady(function () {
+        map.setView(selectedMarker.getLatLng(), 15);
+        selectedMarker.openPopup();
+      });
+    }
   </script>
 </body>
 </html>

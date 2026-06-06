@@ -6,9 +6,16 @@ import type {
   ObservationSession,
   Patient,
   Prescription,
+  SyncStatus,
   SymptomDefinition,
 } from "@/models";
 import { apiRequest, isApiConfigured, ApiError } from "./api";
+import {
+  generateDoseSchedules,
+  hasConfiguredTimeShift,
+  mergeDoseSchedules,
+} from "./doseScheduler";
+import { enqueueSync, trySyncPrescriptions } from "./prescriptionSync";
 
 const KEYS = {
   AUTH_TOKEN: "auth_token",
@@ -86,6 +93,11 @@ type ApiPrescriptionDto = {
   byPharmacist?: boolean | null;
   pharmacyId?: number | null;
   foodRequirement?: string | null;
+  note?: string | null;
+  byDoctor?: boolean | null;
+  doctorName?: string | null;
+  timeShift?: number | null;
+  isDone?: boolean | null;
 };
 
 type ApiDoseScheduleDto = {
@@ -255,33 +267,58 @@ function mapPrescription(
   medicine: Medicine,
   schedules: ApiDoseScheduleDto[],
 ): Prescription {
-  return {
+  const startDate = dto.startDate
+    ? dto.startDate.split("T")[0]
+    : new Date().toISOString().split("T")[0];
+  const base: Prescription = {
     id: dto.id,
     patientId: String(dto.patientId),
     medicineId: String(dto.medicineId),
     medicine,
     dose: dto.dose ?? "As directed",
-    frequency: dto.frequency ?? "As directed",
+    frequency: dto.frequency ?? "24 hours",
     foodRequirement: mapFoodRequirement(dto.foodRequirement),
-    startDate: dto.startDate ?? new Date().toISOString().split("T")[0],
-    ...(dto.endDate ? { endDate: dto.endDate } : {}),
-    prescribedBy: dto.byPharmacist ? "Pharmacist" : "Doctor",
-    doseSchedules: schedules
-      .slice()
-      .sort((a, b) =>
-        extractTime(a.takeAt).localeCompare(extractTime(b.takeAt)),
-      )
-      .map((schedule) => ({
-        id: String(schedule.id),
-        prescriptionId: String(dto.id),
-        scheduledTime: extractTime(schedule.takeAt),
-        status: schedule.taken ? "taken" : "pending",
-        ...(schedule.takenAt ? { takenAt: schedule.takenAt } : {}),
-        ...(schedule.patientPersonalNote
-          ? { patientNote: schedule.patientPersonalNote }
-          : {}),
-      })),
+    startDate,
+    ...(dto.endDate ? { endDate: dto.endDate.split("T")[0] } : {}),
+    prescribedBy: dto.byDoctor
+      ? (dto.doctorName ?? "Doctor")
+      : dto.byPharmacist
+        ? "Pharmacist"
+        : "Myself",
+    note: dto.note ?? undefined,
+    byDoctor: dto.byDoctor ?? undefined,
+    doctorName: dto.doctorName ?? undefined,
+    timeShift:
+      dto.timeShift != null && dto.timeShift > 0 ? dto.timeShift : undefined,
+    isDone: dto.isDone ?? false,
+    syncStatus: "synced",
+    doseSchedules: [],
   };
+
+  const fromServer = schedules
+    .slice()
+    .sort((a, b) =>
+      extractTime(a.takeAt).localeCompare(extractTime(b.takeAt)),
+    )
+    .map((schedule) => ({
+      id: String(schedule.id),
+      prescriptionId: String(dto.id),
+      takeAt: schedule.takeAt ?? undefined,
+      scheduledTime: extractTime(schedule.takeAt),
+      status: (schedule.taken ? "taken" : "pending") as DoseSchedule["status"],
+      serverId: schedule.id,
+      syncStatus: "synced" as const,
+      ...(schedule.takenAt ? { takenAt: schedule.takenAt } : {}),
+      ...(schedule.patientPersonalNote
+        ? { patientNote: schedule.patientPersonalNote }
+        : {}),
+    }));
+
+  if (fromServer.length > 0) {
+    return { ...base, doseSchedules: fromServer };
+  }
+
+  return withGeneratedDoses(base);
 }
 
 async function getStoredPatient(): Promise<Patient | null> {
@@ -324,7 +361,7 @@ async function resolveMedicineIdByName(name: string): Promise<number> {
 
   const searchParams = new URLSearchParams({
     page: "0",
-    size: "100",
+    size: "50",
     name: normalizedName,
   });
 
@@ -373,6 +410,94 @@ function isUuid(value?: string | null): value is string {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value,
   );
+}
+
+function newPrescriptionId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `local_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isUnsyncedPrescription(rx: Prescription): boolean {
+  return rx.syncStatus === "pending_create" || rx.id.startsWith("local_");
+}
+
+async function loadLocalPrescriptions(): Promise<Prescription[]> {
+  const stored = await AsyncStorage.getItem(KEYS.PRESCRIPTIONS);
+  if (!stored) return [];
+  try {
+    return JSON.parse(stored) as Prescription[];
+  } catch {
+    return [];
+  }
+}
+
+async function saveLocalPrescriptions(
+  prescriptions: Prescription[],
+): Promise<void> {
+  await AsyncStorage.setItem(KEYS.PRESCRIPTIONS, JSON.stringify(prescriptions));
+}
+
+async function persistPrescriptions(
+  prescriptions: Prescription[],
+): Promise<Prescription[]> {
+  await saveLocalPrescriptions(prescriptions);
+  const patientId = await getStoredPatientId();
+  if (patientId != null && isApiConfigured()) {
+    let next = prescriptions;
+    await trySyncPrescriptions(prescriptions, patientId, async (updated) => {
+      next = updated;
+      await saveLocalPrescriptions(updated);
+    });
+    return next;
+  }
+  return prescriptions;
+}
+
+function withGeneratedDoses(
+  rx: Prescription,
+  previous?: Prescription,
+): Prescription {
+  if (!hasConfiguredTimeShift(rx)) {
+    return { ...rx, doseSchedules: previous?.doseSchedules ?? [] };
+  }
+  const generated = generateDoseSchedules(rx);
+  const doseSchedules = previous
+    ? mergeDoseSchedules(generated, previous.doseSchedules)
+    : generated;
+  return { ...rx, doseSchedules };
+}
+
+export async function updatePrescriptionTimeShift(
+  prescriptionId: string,
+  timeShift: number,
+): Promise<Prescription[]> {
+  const all = await loadLocalPrescriptions();
+  const existing = all.find((rx) => rx.id === prescriptionId);
+  if (!existing) {
+    throw new Error("Prescription not found.");
+  }
+
+  const updated: Prescription = withGeneratedDoses(
+    {
+      ...existing,
+      timeShift,
+      syncStatus: isUnsyncedPrescription(existing)
+        ? "pending_create"
+        : "pending_update",
+    },
+    existing,
+  );
+
+  const next = all.map((rx) => (rx.id === prescriptionId ? updated : rx));
+  await saveLocalPrescriptions(next);
+
+  if (!isUnsyncedPrescription(updated)) {
+    await enqueueSync({ type: "prescription_update", id: prescriptionId });
+  }
+
+  return persistPrescriptions(next);
 }
 
 function extractObservationValue(observation: ApiObservationDto) {
@@ -438,10 +563,6 @@ async function loadRemotePrescriptions(): Promise<Prescription[] | null> {
       ),
     );
 
-    await AsyncStorage.setItem(
-      KEYS.PRESCRIPTIONS,
-      JSON.stringify(prescriptions),
-    );
     return prescriptions;
   } catch (error) {
     console.warn("Failed to load prescriptions from API:", error);
@@ -472,6 +593,9 @@ async function loadRemoteSymptomDefinitions(): Promise<
       description: definition.description ?? undefined,
     }));
   } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return [];
+    }
     console.warn("Failed to load symptom definitions from API:", error);
     return null;
   }
@@ -603,10 +727,68 @@ export async function logout(): Promise<void> {
   ]);
 }
 
-export async function getPrescriptions(): Promise<Prescription[]> {
+async function pullRemotePrescriptionMetadata(): Promise<void> {
   const remote = await loadRemotePrescriptions();
-  if (remote) return remote;
-  throw new Error("Failed to load prescriptions from backend.");
+  if (!remote?.length) return;
+
+  const local = await loadLocalPrescriptions();
+  const remoteById = new Map(remote.map((rx) => [rx.id, rx]));
+  const localIds = new Set(local.map((rx) => rx.id));
+
+  const merged = local.map((rx) => {
+    const server = remoteById.get(rx.id);
+    if (!server) return rx;
+    return {
+      ...rx,
+      isDone: server.isDone ?? rx.isDone,
+      note: server.note ?? rx.note,
+      byDoctor: server.byDoctor ?? rx.byDoctor,
+      doctorName: server.doctorName ?? rx.doctorName,
+      timeShift:
+        server.timeShift != null && server.timeShift > 0
+          ? server.timeShift
+          : rx.timeShift,
+      syncStatus: (rx.syncStatus === "pending_create"
+        ? rx.syncStatus
+        : "synced") as SyncStatus,
+    };
+  });
+
+  for (const serverRx of remote) {
+    if (!localIds.has(serverRx.id)) {
+      merged.push(serverRx);
+    }
+  }
+
+  await saveLocalPrescriptions(merged);
+}
+
+export async function getPrescriptions(): Promise<Prescription[]> {
+  let local = await loadLocalPrescriptions();
+
+  const patientId = await getStoredPatientId();
+  if (patientId != null && isApiConfigured()) {
+    await trySyncPrescriptions(local, patientId, async (updated) => {
+      local = updated;
+      await saveLocalPrescriptions(updated);
+    });
+    await pullRemotePrescriptionMetadata();
+    local = await loadLocalPrescriptions();
+  }
+
+  if (local.length === 0 && isApiConfigured()) {
+    const remote = await loadRemotePrescriptions();
+    if (remote?.length) {
+      await saveLocalPrescriptions(remote);
+      return remote;
+    }
+  }
+
+  return local;
+}
+
+export async function syncPrescriptionsNow(): Promise<Prescription[]> {
+  return getPrescriptions();
 }
 
 export async function updateDoseSchedule(
@@ -614,47 +796,62 @@ export async function updateDoseSchedule(
   doseScheduleId: string,
   updates: Partial<DoseSchedule>,
 ): Promise<Prescription[]> {
-  if (!isApiConfigured() || !isNumericId(doseScheduleId)) {
-    throw new Error("Dose schedule update requires backend data.");
+  const all = await loadLocalPrescriptions();
+  const index = all.findIndex((rx) => rx.id === prescriptionId);
+  if (index < 0) {
+    throw new Error("Prescription not found.");
   }
 
-  const token = await getAuthToken();
-  const nextStatus = updates.status as string | undefined;
-  if (!token) {
-    throw new Error("Missing auth token.");
+  const rx = all[index];
+  const doseIndex = rx.doseSchedules.findIndex((d) => d.id === doseScheduleId);
+  if (doseIndex < 0) {
+    throw new Error("Dose schedule not found.");
   }
 
-  if (nextStatus === "taken") {
-    await requestApi(
-      `/dose-schedules/${doseScheduleId}/take`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          patientPersonalNote: updates.patientNote ?? null,
-        }),
-      },
-      token,
-    );
-  } else {
-    await requestApi(
-      `/dose-schedules/${doseScheduleId}`,
-      {
-        method: "PUT",
-        body: JSON.stringify({
-          taken: nextStatus === "taken",
-          takenAt: updates.takenAt ?? null,
-          patientPersonalNote: updates.patientNote ?? null,
-        }),
-      },
-      token,
-    );
+  const currentDose = rx.doseSchedules[doseIndex];
+  const nextDose: DoseSchedule = {
+    ...currentDose,
+    ...updates,
+    syncStatus:
+      updates.status === "taken" ? "pending_take" : currentDose.syncStatus,
+  };
+
+  const nextRx: Prescription = {
+    ...rx,
+    doseSchedules: rx.doseSchedules.map((d, i) =>
+      i === doseIndex ? nextDose : d,
+    ),
+  };
+
+  const next = [...all];
+  next[index] = nextRx;
+  await saveLocalPrescriptions(next);
+
+  if (updates.status === "taken") {
+    await enqueueSync({
+      type: "dose_take",
+      prescriptionId: rx.id,
+      localDoseId: doseScheduleId,
+      takenAt: updates.takenAt ?? new Date().toISOString(),
+      note: updates.patientNote,
+    });
   }
 
-  const refreshed = await loadRemotePrescriptions();
-  if (!refreshed) {
-    throw new Error("Failed to refresh prescriptions after update.");
-  }
-  return refreshed;
+  return persistPrescriptions(next);
+}
+
+export async function markPrescriptionDone(
+  prescriptionId: string,
+): Promise<Prescription[]> {
+  const all = await loadLocalPrescriptions();
+  const next = all.map((rx) =>
+    rx.id === prescriptionId
+      ? { ...rx, isDone: true, syncStatus: "pending_done" as const }
+      : rx,
+  );
+  await saveLocalPrescriptions(next);
+  await enqueueSync({ type: "prescription_done", id: prescriptionId });
+  return persistPrescriptions(next);
 }
 
 export async function getObservationSessions(): Promise<ObservationSession[]> {
@@ -859,107 +1056,96 @@ export async function deleteObservationSession(
 export async function addPrescription(
   prescription: Prescription,
 ): Promise<Prescription[]> {
-  if (!isApiConfigured()) {
-    throw new Error("Prescription creation requires a backend connection.");
-  }
-
-  const token = await getAuthToken();
   const patientId = await getStoredPatientId();
-  if (!token || patientId == null) {
-    throw new Error("Missing patient authentication details.");
+  const storedPatient = await getStoredPatient();
+
+  let medicine = prescription.medicine;
+  let medicineId = prescription.medicineId;
+  if (!isNumericId(medicineId) && isApiConfigured()) {
+    try {
+      const resolved = await resolveMedicineIdByName(prescription.medicine.name);
+      medicineId = String(resolved);
+      medicine = { ...medicine, id: medicineId };
+    } catch {
+      // Keep custom medicine id offline until sync.
+    }
   }
 
-  const medicineId = isNumericId(prescription.medicineId)
-    ? Number.parseInt(prescription.medicineId, 10)
-    : await resolveMedicineIdByName(prescription.medicine.name);
-
-  await requestApi(
-    "/prescriptions",
+  const id = isUuid(prescription.id) ? prescription.id : newPrescriptionId();
+  const full: Prescription = withGeneratedDoses(
     {
-      method: "POST",
-      body: JSON.stringify({
-        patientId,
-        medicineId,
-        dose: prescription.dose,
-        frequency: toBackendFrequency(prescription.frequency),
-        startDate: toBackendDateTime(prescription.startDate),
-        endDate: prescription.endDate
-          ? toBackendDateTime(prescription.endDate, true)
-          : null,
-        byPharmacist: false,
-        foodRequirement: prescription.foodRequirement,
-      }),
+      ...prescription,
+      id,
+      patientId: storedPatient?.id ?? prescription.patientId,
+      medicineId,
+      medicine,
+      note: prescription.note ?? prescription.notes,
+      timeShift: undefined,
+      syncStatus: "pending_create",
+      isDone: false,
+      doseSchedules: [],
     },
-    token,
+    undefined,
   );
 
-  const refreshed = await loadRemotePrescriptions();
-  if (!refreshed) {
-    throw new Error("Failed to refresh prescriptions after creation.");
+  const all = await loadLocalPrescriptions();
+  const next = [full, ...all.filter((rx) => rx.id !== id)];
+  await saveLocalPrescriptions(next);
+  await enqueueSync({ type: "prescription_create", localId: id });
+
+  if (patientId != null) {
+    return persistPrescriptions(next);
   }
-  return refreshed;
+  return next;
 }
 
 export async function removePrescription(
   prescriptionId: string,
 ): Promise<Prescription[]> {
-  if (!isApiConfigured()) {
-    throw new Error("Prescription deletion requires backend connection.");
+  const all = await loadLocalPrescriptions();
+  const next = all.filter((rx) => rx.id !== prescriptionId);
+  await saveLocalPrescriptions(next);
+
+  const removed = all.find((rx) => rx.id === prescriptionId);
+  if (removed && !isUnsyncedPrescription(removed)) {
+    await enqueueSync({ type: "prescription_delete", id: prescriptionId });
+    return persistPrescriptions(next);
   }
 
-  const token = await getAuthToken();
-  if (!token) {
-    throw new Error("Missing auth token.");
-  }
-
-  await requestApi(
-    `/prescriptions/${prescriptionId}`,
-    { method: "DELETE" },
-    token,
-  );
-  const refreshed = await loadRemotePrescriptions();
-  if (!refreshed) {
-    throw new Error("Failed to refresh prescriptions after deletion.");
-  }
-  return refreshed;
+  return next;
 }
 
 export async function updatePrescription(
   prescriptionId: string,
   prescription: Prescription,
 ): Promise<Prescription[]> {
-  if (!isApiConfigured()) {
-    throw new Error("Prescription update requires backend connection.");
+  const all = await loadLocalPrescriptions();
+  const existing = all.find((rx) => rx.id === prescriptionId);
+  if (!existing) {
+    throw new Error("Prescription not found.");
   }
 
-  const token = await getAuthToken();
-  if (!token) {
-    throw new Error("Missing auth token.");
-  }
-
-  await requestApi(
-    `/prescriptions/${prescriptionId}`,
+  const updated: Prescription = withGeneratedDoses(
     {
-      method: "PUT",
-      body: JSON.stringify({
-        dose: prescription.dose,
-        frequency: toBackendFrequency(prescription.frequency),
-        startDate: toBackendDateTime(prescription.startDate),
-        endDate: prescription.endDate
-          ? toBackendDateTime(prescription.endDate, true)
-          : null,
-        byPharmacist: false,
-        foodRequirement: prescription.foodRequirement,
-      }),
+      ...existing,
+      ...prescription,
+      id: prescriptionId,
+      note: prescription.note ?? prescription.notes ?? existing.note,
+      syncStatus: isUnsyncedPrescription(existing)
+        ? "pending_create"
+        : "pending_update",
     },
-    token,
+    existing,
   );
 
-  const refreshed = await loadRemotePrescriptions();
-  if (!refreshed) {
-    throw new Error("Failed to refresh prescriptions after update.");
+  const next = all.map((rx) => (rx.id === prescriptionId ? updated : rx));
+  await saveLocalPrescriptions(next);
+
+  if (!isUnsyncedPrescription(updated)) {
+    await enqueueSync({ type: "prescription_update", id: prescriptionId });
   }
-  return refreshed;
+
+  return persistPrescriptions(next);
 }
 
 export async function getDiaryEntries(): Promise<DiaryEntry[]> {

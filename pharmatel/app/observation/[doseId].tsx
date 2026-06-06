@@ -17,7 +17,7 @@ export default function ObservationScreen() {
   const { doseId } = useLocalSearchParams<{ doseId: string }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
-  const { saveObservation, getSessionForDose, symptomDefinitions } = useApp();
+  const { saveObservation, getSessionForDose, symptomDefinitions, t } = useApp();
   const [existingSession, setExistingSession] = useState<ObservationSession | null | undefined>(undefined);
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export default function ObservationScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {existingSession ? "Update your symptom diary for this dose" : "Record how you felt after taking this dose"}
+          {existingSession ? t("updateEntry") : t("recordHowFelt")}
         </Text>
       </View>
       <View style={styles.content}>

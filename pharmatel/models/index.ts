@@ -23,6 +23,14 @@ export interface Medicine {
   sideEffects?: string[];
 }
 
+export type SyncStatus =
+  | "local"
+  | "synced"
+  | "pending_create"
+  | "pending_update"
+  | "pending_delete"
+  | "pending_done";
+
 export interface Prescription {
   id: string;
   patientId: string;
@@ -34,19 +42,33 @@ export interface Prescription {
   startDate: string;
   endDate?: string;
   prescribedBy: string;
+  /** Backend `note` field. */
+  note?: string;
+  /** @deprecated Use `note` — kept for older local data. */
   notes?: string;
+  byDoctor?: boolean;
+  doctorName?: string;
+  /** Minutes from midnight for the first scheduled dose. */
+  timeShift?: number;
+  isDone?: boolean;
+  syncStatus?: SyncStatus;
   doseSchedules: DoseSchedule[];
 }
 
 export interface DoseSchedule {
   id: string;
   prescriptionId: string;
+  /** Full scheduled datetime (local ISO). */
+  takeAt?: string;
   scheduledTime: string;
   dayOfWeek?: string[];
   status: "pending" | "taken" | "missed" | "skipped";
   takenAt?: string;
   patientNote?: string;
   observationSessionId?: string;
+  /** Backend numeric id after sync. */
+  serverId?: number;
+  syncStatus?: "local" | "synced" | "pending_take";
 }
 
 export interface ObservationSession {

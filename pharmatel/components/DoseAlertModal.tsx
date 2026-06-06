@@ -18,8 +18,7 @@ const ACTION_TAKEN = "TAKEN";
 const ACTION_IGNORE = "IGNORE";
 
 export function DoseAlertModal() {
-  const { currentDoseNotification, dismissDoseNotification, prescriptions } =
-    useApp();
+  const { currentDoseNotification, dismissDoseNotification, prescriptions, t } = useApp();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
 
@@ -47,7 +46,7 @@ export function DoseAlertModal() {
             takenAt: new Date().toISOString(),
           },
         );
-        Alert.alert("نجح", "تم تسجيل الجرعة بنجاح");
+        Alert.alert(t("success"), t("doseRecordedSuccess"));
       } else if (action === ACTION_IGNORE) {
         await updateDoseSchedule(
           notification.prescriptionId,
@@ -55,10 +54,10 @@ export function DoseAlertModal() {
           {
             status: "skipped",
             takenAt: undefined,
-            patientNote: "تم تجاهل الإشعار",
+            patientNote: t("doseIgnoredSuccess"),
           },
         );
-        Alert.alert("تم التجاهل", "تم تجاهل هذه الجرعة");
+        Alert.alert(t("skip"), t("doseIgnoredSuccess"));
       }
 
       await Notifications.dismissNotificationAsync(
@@ -67,7 +66,7 @@ export function DoseAlertModal() {
       dismissDoseNotification();
     } catch (error) {
       console.error("Error handling dose action:", error);
-      Alert.alert("خطأ", "حدث خطأ أثناء معالجة الطلب");
+      Alert.alert(t("deleteFailed"), t("doseActionError"));
     }
   };
 
@@ -108,14 +107,14 @@ export function DoseAlertModal() {
 
           {/* Title */}
           <Text style={[styles.title, { color: colors.text }]}>
-            💊 وقت الجرعة
+            💊 {t("doseAlertTitle")}
           </Text>
 
           {/* Medicine Info */}
           {prescription && (
             <View style={styles.infoSection}>
               <Text style={[styles.label, { color: colors.textSecondary }]}>
-                الدواء
+                {t("medicineLabel")}
               </Text>
               <Text style={[styles.value, { color: colors.text }]}>
                 {prescription.medicine.name}
@@ -127,7 +126,7 @@ export function DoseAlertModal() {
                   { color: colors.textSecondary, marginTop: 12 },
                 ]}
               >
-                الجرعة
+                {t("doseLabel")}
               </Text>
               <Text style={[styles.value, { color: colors.text }]}>
                 {prescription.dose}
@@ -141,7 +140,7 @@ export function DoseAlertModal() {
                       { color: colors.textSecondary, marginTop: 12 },
                     ]}
                   >
-                    الوقت المجدول
+                    {t("scheduledTimeLabel")}
                   </Text>
                   <Text style={[styles.value, { color: colors.text }]}>
                     {doseSchedule.scheduledTime}
@@ -171,7 +170,7 @@ export function DoseAlertModal() {
                   { color: colors.error, marginLeft: 8 },
                 ]}
               >
-                تجاهل
+                {t("skip")}
               </Text>
             </TouchableOpacity>
 
@@ -187,7 +186,7 @@ export function DoseAlertModal() {
               <Text
                 style={[styles.buttonText, { color: "#fff", marginLeft: 8 }]}
               >
-                أخذت الدواء
+                {t("doseRecordedSuccess")}
               </Text>
             </TouchableOpacity>
           </View>

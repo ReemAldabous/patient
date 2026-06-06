@@ -19,7 +19,7 @@ export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
   const insets = useSafeAreaInsets();
-  const { patient, logout, prescriptions, observationSessions } = useApp();
+  const { patient, logout, prescriptions, observationSessions, language, setLanguage, locale, t } = useApp();
   const topPadding = insets.top + (Platform.OS === "web" ? 67 : 0);
 
   const handleLogout = async () => {
@@ -37,7 +37,7 @@ export default function ProfileScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPadding, backgroundColor: colors.surface, borderBottomColor: colors.borderLight }]}>
-        <Text style={[styles.title, { color: colors.text }]}>Profile</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{t("profile")}</Text>
       </View>
 
       <ScrollView
@@ -60,7 +60,7 @@ export default function ProfileScreen() {
           <Text style={styles.patientUsername}>@{patient?.username ?? "unknown"}</Text>
           {patient?.dateOfBirth && (
             <Text style={styles.dob}>
-              DOB: {formatDate(patient.dateOfBirth)}
+              DOB: {formatDate(patient.dateOfBirth, locale)}
             </Text>
           )}
         </View>
@@ -68,19 +68,19 @@ export default function ProfileScreen() {
         {/* Stats */}
         <View style={styles.statsRow}>
           <StatCard
-            label="Active Rx"
+            label={t("activeRx")}
             value={activePrescriptions.length.toString()}
             icon="activity"
             colors={colors}
           />
           <StatCard
-            label="Doses Taken"
+            label={t("dosesTaken")}
             value={takenDoses.toString()}
             icon="check-circle"
             colors={colors}
           />
           <StatCard
-            label="Diary Entries"
+            label={t("diaryEntries")}
             value={observationSessions.length.toString()}
             icon="book"
             colors={colors}
@@ -91,24 +91,66 @@ export default function ProfileScreen() {
         <View style={[styles.menuCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <MenuItem
             icon="file-text"
-            label="My Prescriptions"
+            label={t("myPrescriptions")}
             colors={colors}
             onPress={() => router.push("/(tabs)/prescriptions")}
           />
           <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
           <MenuItem
             icon="book"
-            label="Symptom Diary"
+            label={t("symptomDiary")}
             colors={colors}
-            onPress={() => router.push("/(tabs)/prescriptions")}
+            onPress={() => router.push("/(tabs)/diary")}
           />
           <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
           <MenuItem
             icon="bell"
-            label="Upcoming Doses"
+            label={t("upcomingDoses")}
             colors={colors}
             onPress={() => router.push("/(tabs)/notifications")}
           />
+        </View>
+
+        <View style={[styles.menuCard, { backgroundColor: colors.surface, borderColor: colors.border }]}> 
+          <View style={styles.menuItem}>
+            <View style={[styles.menuIcon, { backgroundColor: colors.primary + "15" }]}>
+              <Feather name="globe" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.menuTextGroup}>
+              <Text style={[styles.menuLabel, { color: colors.text }]}>{t("languageLabel")}</Text>
+              <Text style={[styles.menuSub, { color: colors.textMuted }]}>{t("changesApplyImmediately")}</Text>
+            </View>
+          </View>
+          <View style={styles.languageRow}>
+            <Pressable
+              onPress={() => void setLanguage("en")}
+              style={[
+                styles.languageChip,
+                {
+                  backgroundColor: language === "en" ? colors.primary : colors.surfaceSecondary,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text style={{ color: language === "en" ? "#fff" : colors.textSecondary, fontFamily: "Inter_600SemiBold" }}>
+                {t("english")}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void setLanguage("ar")}
+              style={[
+                styles.languageChip,
+                {
+                  backgroundColor: language === "ar" ? colors.primary : colors.surfaceSecondary,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text style={{ color: language === "ar" ? "#fff" : colors.textSecondary, fontFamily: "Inter_600SemiBold" }}>
+                {t("arabic")}
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* App info */}
@@ -118,7 +160,7 @@ export default function ProfileScreen() {
               <Feather name="info" size={18} color={colors.primary} />
             </View>
             <View style={styles.menuTextGroup}>
-              <Text style={[styles.menuLabel, { color: colors.text }]}>App Version</Text>
+              <Text style={[styles.menuLabel, { color: colors.text }]}>{t("appVersion")}</Text>
               <Text style={[styles.menuSub, { color: colors.textMuted }]}>1.0.0</Text>
             </View>
           </View>
@@ -137,7 +179,7 @@ export default function ProfileScreen() {
           ]}
         >
           <Feather name="log-out" size={18} color={colors.error} />
-          <Text style={[styles.logoutText, { color: colors.error }]}>Sign Out</Text>
+          <Text style={[styles.logoutText, { color: colors.error }]}>{t("signOut")}</Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -304,6 +346,20 @@ const styles = StyleSheet.create({
   },
   menuTextGroup: {
     flex: 1,
+  },
+  languageRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  languageChip: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   menuLabel: {
     fontSize: 16,
