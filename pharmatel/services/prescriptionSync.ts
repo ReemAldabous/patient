@@ -119,8 +119,8 @@ function buildCreateBody(rx: Prescription, patientId: number) {
     note: rx.note ?? rx.notes ?? null,
     byDoctor: rx.byDoctor ?? false,
     doctorName: rx.doctorName ?? null,
-    timeShift: rx.timeShift ?? 0,
-    is_done: rx.isDone ?? false,
+    timeShift: rx.timeShift ?? 0
+
   };
 }
 
